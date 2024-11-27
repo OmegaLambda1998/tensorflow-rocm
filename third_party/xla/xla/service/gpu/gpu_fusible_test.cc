@@ -16,22 +16,84 @@ limitations under the License.
 #include "xla/service/gpu/gpu_fusible.h"
 
 #include <memory>
-#include <vector>
 
 #include <gtest/gtest.h>
 #include "absl/strings/str_cat.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
+<<<<<<< HEAD
 #include "xla/service/hlo_parser.h"
 #include "xla/tests/hlo_test_base.h"
+=======
+#include "xla/hlo/parser/hlo_parser.h"
+#include "xla/service/hlo_runner.h"
+#include "xla/service/instruction_fusion.h"
+#include "xla/service/platform_util.h"
+#include "xla/stream_executor/device_description.h"
+#include "xla/tests/new_hlo_test_base.h"
+>>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 #include "tsl/platform/statusor.h"
 
 namespace xla {
 namespace gpu {
+namespace {
 
 using ::testing::ElementsAre;
 
-using GpuFusibleTest = HloTestBase;
+auto MakeDeviceDescription() {
+  stream_executor::DeviceDescription device_description{
+      stream_executor::GpuDeviceInfoProto{}};
+  device_description.set_threads_per_warp(32);
+  return device_description;
+}
+
+class GpuFusibleTest : public NewHloTestBase {
+ public:
+  GpuFusibleTest()
+      : NewHloTestBase(std::make_unique<HloRunner>(
+                           PlatformUtil::GetDefaultPlatform().value()),
+                       std::make_unique<HloRunner>(
+                           PlatformUtil::GetDefaultPlatform().value())),
+        device_description_(MakeDeviceDescription()) {}
+
+  bool IsReduceInputFusion(const HloInstruction& instr) const {
+    return ::xla::gpu::IsReduceInputFusion(instr, device_description_);
+  }
+
+  bool IsInputFusibleReduction(const HloInstruction& instr) const {
+    return ::xla::gpu::IsInputFusibleReduction(instr, device_description_);
+  }
+
+  FusionDecision IsProducerMultiOutputFusible(
+      const HloInstruction& producer) const {
+    return ::xla::gpu::IsProducerMultiOutputFusible(producer,
+                                                    device_description_);
+  }
+
+  bool IsFusibleAsMultiOutputFusionRoot(const HloInstruction& instr) const {
+    return ::xla::gpu::IsFusibleAsMultiOutputFusionRoot(instr,
+                                                        device_description_);
+  }
+
+  FusionDecision FusionHeroesAreCompatible(const HloInstruction* hero1,
+                                           const HloInstruction* hero2) const {
+    return ::xla::gpu::FusionHeroesAreCompatible(hero1, hero2,
+                                                 device_description_);
+  }
+
+  FusionDecision ShapesCompatibleForMultiOutputFusion(
+      const HloInstruction& instr1, const HloInstruction& instr2) const {
+    return ::xla::gpu::ShapesCompatibleForMultiOutputFusion(
+        instr1, instr2, device_description_);
+  }
+
+  const se::DeviceDescription& device_description() const {
+    return device_description_;
+  }
+
+ private:
+  const se::DeviceDescription device_description_;
+};
 
 const char kModulePrefix[] = R"(
     HloModule test_module
@@ -1532,7 +1594,7 @@ ENTRY computation {
                     .value();
   const HloInstruction* root = module->entry_computation()->root_instruction();
   const HloInstruction* producer = root->operand(0);
-  EXPECT_EQ(ChooseFusionKind(*producer, *root),
+  EXPECT_EQ(ChooseFusionKind(*producer, *root, device_description()),
             HloInstruction::FusionKind::kInput);
 }
 
@@ -1773,12 +1835,35 @@ TEST_F(GpuFusibleTest, GetSharedMemoryUsage) {
       ROOT res = f32[1024,128,2]{2,1,0} fusion(p), kind=kInput, calls=wrapped_transpose
     })"))
                     .value();
+<<<<<<< HEAD
   auto& debug_options = module->mutable_config().mutable_debug_options();
   debug_options.set_xla_gpu_mlir_emitter_level(3);
   FusionInfoCache cache;
+=======
+  FusionInfoCache cache(device_description());
+>>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
   auto fusion = module->entry_computation()->root_instruction();
   EXPECT_EQ(cache.GetSharedMemoryUsage(*fusion), 32 * 33 * 2 * 4);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(GpuFusibleTest, IsConsumerTheOnlyNonRootUser) {
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(R"(
+e {
+  p = s8[] parameter(0)
+  n = s8[] negate(p)
+  b = s8[1] bitcast(p)
+  t = tuple(b, n)
+})"));
+
+  const HloInstruction& p =
+      *module->entry_computation()->parameter_instruction(0);
+  const HloInstruction& n = *p.users().front();
+  EXPECT_TRUE(IsConsumerTheOnlyNonRootUser(p, n));
+}
+
+}  // namespace
+>>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 }  // namespace gpu
 }  // namespace xla

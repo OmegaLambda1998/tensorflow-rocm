@@ -191,8 +191,10 @@ xla_cc_test(
     srcs = ["gpu_copy_insertion_test.cc"],
     deps = [
         ":buffer_sharing",
+        ":gpu_device_info_for_tests",
         "//xla:test",
         "//xla:test_helpers",
+        "//xla/hlo/analysis:hlo_dataflow_analysis",
         "//xla/hlo/ir:hlo",
         "//xla/service:copy_insertion",
         "//xla/tests:hlo_test_base",
@@ -263,7 +265,9 @@ xla_cc_test(
 
 cc_library(
     name = "gpu_device_info_for_tests",
-    testonly = 1,
+    # This is *not* a test library because it is used in a cc_binary which is used for testing but
+    # test_only libraries are not allowed in cc_binaries.
+    testonly = 0,
     srcs = ["gpu_device_info_for_tests.cc"],
     hdrs = ["gpu_device_info_for_tests.h"],
     compatible_with = get_compatible_with_portable(),
@@ -702,8 +706,12 @@ cc_library(
         "//xla:shape_util",
         "//xla:util",
         "//xla/hlo/ir:hlo",
+<<<<<<< HEAD
         "//xla/service:hlo_module_config",
         "//xla/stream_executor:semantic_version",
+=======
+        "//xla/stream_executor:device_description",
+>>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:inlined_vector",
@@ -1345,6 +1353,7 @@ cc_library(
         "//xla/service/gpu/transforms:copy_fusion",
         "//xla/service/gpu/transforms:horizontal_loop_fusion",
         "//xla/service/gpu/transforms:sanitize_constant_names",
+        "//xla/stream_executor:device_description",
     ],
 )
 
@@ -2519,8 +2528,17 @@ xla_cc_test(
     deps = [
         ":gpu_fusible",
         "//xla/hlo/ir:hlo",
+<<<<<<< HEAD
         "//xla/service:hlo_parser",
         "//xla/tests:hlo_test_base",
+=======
+        "//xla/hlo/parser:hlo_parser",
+        "//xla/service:hlo_runner",
+        "//xla/service:instruction_fusion",
+        "//xla/service:platform_util",
+        "//xla/stream_executor:device_description",
+        "//xla/tests:new_hlo_test_base",
+>>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
         "//xla/tests:xla_internal_test_main",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",

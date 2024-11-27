@@ -117,10 +117,18 @@ struct MlirReductionFusion::EmitterState {
   PerThreadOutputs EmitPerThreadElements(int group_id, const HloValueMap& inits,
                                          const SmallVector<Value>& outputs);
 
+  mlir::ValueRange ReduceViaSharedMemory(int group_id,
+                                         const PerThreadOutputs& per_thread,
+                                         const HloValueMap& inits,
+                                         std::optional<int> padding,
+                                         int max_dist);
+
   mlir::ValueRange ReduceViaSharedMemory(
       int group_id, const PerThreadOutputs& per_thread,
-      const HloValueMap& inits, std::optional<int> padding = std::nullopt,
-      int max_dist = WarpSize() / 2);
+      const HloValueMap& inits, std::optional<int> padding = std::nullopt) {
+    return ReduceViaSharedMemory(group_id, per_thread, inits, padding,
+                                 owner.WarpSize() / 2);
+  }
 
   mlir::func::FuncOp GetReducer(const HloInstruction* hero) const {
     return call_target(hero->called_computations()[0]->root_instruction());
@@ -133,8 +141,12 @@ struct MlirReductionFusion::EmitterState {
       const HloValueMap& values, std::optional<int> padding = std::nullopt);
 
   HloValueMap ShuffleReduce(absl::Span<const HloInstruction* const> reductions,
-                            const HloValueMap& per_thread_values,
-                            int max_dist = WarpSize() / 2);
+                            const HloValueMap& per_thread_values, int max_dist);
+
+  HloValueMap ShuffleReduce(absl::Span<const HloInstruction* const> reductions,
+                            const HloValueMap& per_thread_values) {
+    return ShuffleReduce(reductions, per_thread_values, owner.WarpSize() / 2);
+  }
 
   SmallVector<Value> FusionParams() {
     return ValueRange(entry_function.getArguments().take_front(
@@ -253,7 +265,7 @@ SmallVector<Value> MlirReductionFusion::EmitterState::WriteToSharedMemory(
   }
   if (padding) {
     shape.back() += *padding;
-  } else if ((shape.back() % WarpSize()) == 0) {
+  } else if ((shape.back() % owner.WarpSize()) == 0) {
     // Avoid bank conflicts.
     ++shape.back();
   }
@@ -325,7 +337,7 @@ mlir::ValueRange MlirReductionFusion::EmitterState::ReduceViaSharedMemory(
   // The constraints may have reduced the upper bound of the dimension. If
   // that's the case, we reset it to a multiple of the warp size.
   auto& bound = loop_indexing.GetMutableDimensionBound(0);
-  bound.upper = RoundUpTo(bound.upper + 1, WarpSize()) - 1;
+  bound.upper = RoundUpTo(bound.upper + 1, owner.WarpSize()) - 1;
 
   auto tiles =
       WriteToSharedMemory(reductions, per_thread.reduction_scalars, padding);
@@ -364,8 +376,12 @@ MlirReductionFusion::MlirReductionFusion(const HloFusionAnalysis& analysis)
       GetReductionKindAndContiguousComponents(*hero_reduction);
   VLOG(10) << reduction_dimensions_;
 
+<<<<<<< HEAD
   CHECK(ReductionIsRaceFree(hero_reduction->GetModule()->config(),
                             reduction_dimensions_))
+=======
+  CHECK(ReductionIsRaceFree(reduction_dimensions_, analysis.device_info()))
+>>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
       << "Non-race-free reductions should have been decomposed. Did "
          "tree_reduction_rewriter run?";
 
@@ -983,6 +999,61 @@ MlirMultiRowReductionFusion::MlirMultiRowReductionFusion(
       vector_size > 1) {
     compute_block_size(vector_size);
   }
+<<<<<<< HEAD
+=======
+
+  // The reduced dimension must fit into a single warp.
+  const int64_t warp_size = analysis.device_info().threads_per_warp();
+  if (shape[kRowMinorReduced] > warp_size * vector_size) {
+    return nullptr;
+  }
+
+  // At the very least, we want to have work for every SM.
+  // TODO(jreiffers): This limit is probably too low: if we have as many blocks
+  // as SMs, we'll only run about 8 warps per SM, so occupancy will be very low.
+  // Further measurements are needed to refine this heuristic.
+  int64_t min_desired_blocks = analysis.device_info().core_count();
+  while (vector_size > 1 &&
+         GetNumBlocks(reduction_dimensions,
+                      GetNumThreads(reduction_dimensions, vector_size)) <
+             min_desired_blocks) {
+    vector_size /= 2;
+  }
+
+  // Check again that the reduced dimension fits after potentially reducing the
+  // vector size.
+  if (shape[kRowMinorReduced] > warp_size * vector_size) {
+    return nullptr;
+  }
+
+  return std::make_unique<MlirMultiRowReductionFusion>(analysis, vector_size);
+}
+
+absl::InlinedVector<int64_t, 4> MlirMultiRowReductionFusion::GetNumThreads(
+    const ReductionDimensions& reduction_dimensions, int vector_size) {
+  int64_t num_threads_reduced =
+      reduction_dimensions.dimensions[kRowMinorReduced] / vector_size;
+
+  constexpr int64_t kThreadsPerBlockTarget = 256;
+  int64_t kept_size = reduction_dimensions.dimensions[kRowKept];
+  int64_t num_threads_kept = 1;
+  if (kept_size * num_threads_reduced <= kThreadsPerBlockTarget) {
+    num_threads_kept = kept_size;
+  } else {
+    num_threads_kept = kThreadsPerBlockTarget / num_threads_reduced;
+  }
+  return {num_threads_kept, num_threads_reduced};
+}
+
+int64_t MlirMultiRowReductionFusion::GetNumBlocks(
+    const ReductionDimensions& reduction_dimensions,
+    const absl::InlinedVector<int64_t, 4>& num_threads) {
+  CHECK_EQ(num_threads.size(), 2)
+      << "Expected num_threads to contain the number of threads in the {kept, "
+         "reduced} dimensions.";
+  return CeilOfRatio(reduction_dimensions.dimensions[kRowKept],
+                     num_threads.front());
+>>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 }
 
 IndexingMap MlirMultiRowReductionFusion::ComputeReductionInputIndexing(
@@ -1039,5 +1110,29 @@ llvm::SmallVector<mlir::Value> MlirMultiRowReductionFusion::EmitReduction(
                           group_id, /*symbol_values=*/{});
 }
 
+<<<<<<< HEAD
+=======
+std::unique_ptr<MlirReductionFusion> CreateMlirReductionFusion(
+    const HloFusionAnalysis& analysis) {
+  auto* hero_reduction = analysis.FindHeroReduction();
+  CHECK_NE(hero_reduction, nullptr);
+  ReductionDimensions reduction_dimensions =
+      GetReductionKindAndContiguousComponents(*hero_reduction);
+  if (reduction_dimensions.is_row_reduction) {
+    auto multi_row_emitter = MlirMultiRowReductionFusion::TryCreate(analysis);
+    if (multi_row_emitter != nullptr) {
+      return multi_row_emitter;
+    }
+    return std::make_unique<MlirRowReductionFusion>(analysis);
+  }
+
+  const int64_t warp_size = analysis.device_info().threads_per_warp();
+  if (warp_size % reduction_dimensions.dimensions[kColMinorKept] == 0) {
+    return std::make_unique<MlirSmallColumnReductionFusion>(analysis);
+  }
+  return std::make_unique<MlirColumnReductionFusion>(analysis);
+}
+
+>>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 }  // namespace gpu
 }  // namespace xla

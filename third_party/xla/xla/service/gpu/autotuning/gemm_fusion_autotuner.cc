@@ -380,7 +380,7 @@ absl::StatusOr<std::unique_ptr<HloModule>> TritonGemmAutotuneExtractor(
 
     // If the priority fusion pass above skipped some instructions, turn them
     // into fusions.
-    FusionWrapper fusion_wrapper;
+    FusionWrapper fusion_wrapper(gpu_device_info);
     TF_RETURN_IF_ERROR(fusion_wrapper.Run(new_module.get()).status());
   }
   return new_module;
@@ -427,6 +427,48 @@ absl::StatusOr<std::unique_ptr<HloModule>> CublasGemmAutotuneExtractor(
   return new_module;
 }
 
+<<<<<<< HEAD
+=======
+absl::Status UpdateFusionInstructionKernelIndex(
+    HloInstruction* fusion_instruction, int kernel_index) {
+  GpuBackendConfig gpu_config =
+      fusion_instruction->backend_config<GpuBackendConfig>().value();
+  gpu_config.mutable_fusion_backend_config()
+      ->mutable_custom_fusion_config()
+      ->set_kernel_index(kernel_index);
+  TF_RETURN_IF_ERROR(fusion_instruction->set_backend_config(gpu_config));
+
+  return absl::OkStatus();
+}
+
+absl::StatusOr<std::unique_ptr<HloModule>> CustomFusionKernelAutotuneExtractor(
+    const GemmFusionAutotunerImpl::CustomKernelFusionConfig& cutlass_config,
+    const AutotuneConfig& config, const se::SemanticVersion& toolkit_version,
+    const HloFusionInstruction* fusion, const DebugOptions& debug_opts) {
+  const HloComputation* fusion_computation = fusion->called_computation();
+  std::unique_ptr<HloModule> new_module =
+      ExtractComputationIntoNewModule(*fusion_computation);
+  new_module->mutable_config().set_debug_options(debug_opts);
+
+  CustomKernelFusionRewriter rewriter(&config.GetDeviceDescription());
+  PriorityFusion fusion_pass(
+      /*thread_pool=*/nullptr, config.GetDeviceDescription(),
+      PriorityFusionOptions());
+  TF_RETURN_IF_ERROR(rewriter.Run(new_module.get()).status());
+  TF_RETURN_IF_ERROR(fusion_pass.Run(new_module.get()).status());
+
+  // Select custom kernel fusion kernel.
+  HloInstruction* custom_kernel_fusion =
+      hlo_query::GetFirstInstructionWithOpcode(*new_module->entry_computation(),
+                                               HloOpcode::kFusion);
+  int64_t kernel_index = cutlass_config.kernel_index;
+  TF_RETURN_IF_ERROR(
+      UpdateFusionInstructionKernelIndex(custom_kernel_fusion, kernel_index));
+
+  return new_module;
+}
+
+>>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 absl::StatusOr<std::unique_ptr<HloModule>> FusionExtractor(
     const HloFusionInstruction& fusion, const DebugOptions& debug_opts) {
   std::unique_ptr<HloModule> module = ExtractInstructionIntoNewModule(fusion);
@@ -528,7 +570,7 @@ absl::Status DumpAutotunedFusion(const AutotuneConfig& autotune_config,
                         TritonGemmConfig::FromProto(result.triton()));
   }
   const se::DeviceDescription& device_desc =
-      autotune_config.GetExecutor()->GetDeviceDescription();
+      autotune_config.GetDeviceDescription();
   TF_ASSIGN_OR_RETURN(
       std::unique_ptr<HloModule> module,
       util.ExtractModule([&](const DebugOptions& debug_opts) {
@@ -574,6 +616,141 @@ std::string Serialize(const BackendConfig& config) {
 
 }  // anonymous namespace
 
+<<<<<<< HEAD
+=======
+absl::Status RewriteGemmFusionToCall(HloInstruction* fusion_instr) {
+  // Falling back to cuBLAS: Converting the fusion to a Call, so that it
+  // can be inlined back again.
+  HloComputation* const computation = fusion_instr->parent();
+  HloInstruction* const call =
+      computation->AddInstruction(HloInstruction::CreateCall(
+          fusion_instr->shape(), fusion_instr->operands(),
+          fusion_instr->fused_instructions_computation()));
+  return computation->ReplaceInstruction(fusion_instr, call);
+}
+
+absl::Status RewriteGemmFusionToCustomKernelFusion(
+    HloInstruction* fusion_instr, se::DeviceDescription device_description,
+    int64_t kernel_index) {
+  // Rewrites gemm fusion to custom kernel fusion.
+  // First convert the fusion to a call. Then inlines the call. Then
+  // rewrites to custom kernel fusion.
+  HloComputation* const computation = fusion_instr->parent();
+  HloInstruction* const call =
+      computation->AddInstruction(HloInstruction::CreateCall(
+          fusion_instr->shape(), fusion_instr->operands(),
+          fusion_instr->fused_instructions_computation()));
+  TF_RETURN_IF_ERROR(computation->ReplaceInstruction(fusion_instr, call));
+  HloPassPipeline pipeline("autotuner_custom_kernel_fusion_rewriter");
+  pipeline.AddPass<CallInliner>();
+  pipeline.AddPass<CustomKernelFusionRewriter>(&device_description,
+                                               kernel_index);
+  HloModule* hlo_module = call->GetModule();
+  return pipeline.Run(hlo_module).status();
+}
+
+absl::Status HandleTritonGemm(HloInstruction* fusion_instr,
+                              FusionBackendConfig& fusion_backend_config) {
+  TF_ASSIGN_OR_RETURN(
+      const TritonGemmConfig config,
+      TritonGemmConfig::FromProto(fusion_backend_config.triton_gemm_config()));
+  if (config.split_k > 1) {
+    TF_RETURN_IF_ERROR(MakeDotSplitKBatch(fusion_instr, config));
+  }
+  return absl::OkStatus();
+}
+
+absl::Status GemmFusionAutotunerRewriterVisitor::HandleFusion(
+    HloInstruction* fusion_instr) {
+  TF_ASSIGN_OR_RETURN(auto gpu_config,
+                      fusion_instr->backend_config<GpuBackendConfig>());
+  FusionBackendConfig& fusion_backend_config =
+      *gpu_config.mutable_fusion_backend_config();
+
+  // Only autotune Triton, cuDNN, and custom kernel fusions.
+  if (fusion_backend_config.kind() != kTritonGemmFusionKind &&
+      fusion_backend_config.kind() != kCuDnnFusionKind &&
+      fusion_backend_config.kind() != kCustomFusionKind) {
+    return absl::OkStatus();
+  }
+
+  // Do not autotune if the backend config has already assigned tiling config.
+  if (fusion_backend_config.has_triton_gemm_config()) {
+    TF_RETURN_IF_ERROR(HandleTritonGemm(fusion_instr, fusion_backend_config));
+    MarkAsChanged();
+    return absl::OkStatus();
+  }
+
+  // Do not autotune if the backend config has valid config.
+  if (fusion_backend_config.has_cudnn_fusion_config() ||
+      fusion_backend_config.has_custom_fusion_config()) {
+    return absl::OkStatus();
+  }
+
+  VLOG(4) << "Autotuning fusion instruction: " << fusion_instr->ToString();
+  TF_ASSIGN_OR_RETURN(
+      AutotuneResult autotune_result,
+      AutotunerUtil::Autotune(
+          fusion_instr, config_, [&]() -> absl::StatusOr<AutotuneResult> {
+            absl::Status s;
+            if (config_.IsDeviceless()) {
+              s = absl::InternalError(absl::StrCat(
+                  "Expect autotune result cache hit for deviceless "
+                  "compilation (HLO: ",
+                  fusion_instr->ToString(), ")"));
+            } else {
+              s = absl::InternalError("Expect autotune result cache hit.");
+            }
+            tsl::errors::InsertPayloads(
+                s, {{std::string(kAutotuneCacheRequiredErrorPayloadKey), ""}});
+
+            return s;
+          }));
+  VLOG(4) << "Autotuning result: " << autotune_result.ShortDebugString();
+
+  if (autotune_result.has_triton()) {
+    *fusion_backend_config.mutable_triton_gemm_config() =
+        autotune_result.triton();
+    TF_RETURN_IF_ERROR(fusion_instr->set_backend_config(gpu_config));
+    TF_RETURN_IF_ERROR(HandleTritonGemm(fusion_instr, fusion_backend_config));
+    MarkAsChanged();
+    return absl::OkStatus();
+  }
+
+  if (autotune_result.has_gemm()) {
+    TF_RETURN_IF_ERROR(RewriteGemmFusionToCall(fusion_instr));
+    MarkAsChanged();
+    return absl::OkStatus();
+  }
+
+  if (autotune_result.has_custom_kernel_fusion()) {
+    TF_RETURN_IF_ERROR(RewriteGemmFusionToCustomKernelFusion(
+        fusion_instr, config_.GetDeviceDescription(),
+        autotune_result.custom_kernel_fusion().kernel_index()));
+    MarkAsChanged();
+    return absl::OkStatus();
+  }
+
+  // Autotune result has a cuDNN fusion.
+  CHECK(autotune_result.has_algorithm());
+  fusion_backend_config.set_kind(std::string(kCuDnnFusionKind));
+  fusion_backend_config.mutable_cudnn_fusion_config()->set_plan_id(
+      autotune_result.algorithm().algo_id());
+  TF_RETURN_IF_ERROR(fusion_instr->set_backend_config(gpu_config));
+  MarkAsChanged();
+  return absl::OkStatus();
+}
+
+bool GemmFusionAutotunerImpl::IsFusionKind(const HloInstruction& hlo,
+                                           absl::string_view kind) {
+  auto gpu_config = hlo.backend_config<GpuBackendConfig>();
+  if (!gpu_config.ok()) {
+    return false;
+  }
+  return gpu_config->fusion_backend_config().kind() == kind;
+}
+
+>>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 // Methods required for sorting the configs.
 bool GemmFusionAutotunerImpl::CuBlasConfig::operator<(
     const CuBlasConfig& other) const {
@@ -618,6 +795,7 @@ GemmFusionAutotunerImpl::GenerateConfigs(const HloFusionInstruction& fusion) {
       configs.push_back(CuBlasConfig{});
     }
 
+<<<<<<< HEAD
     // Add cuDNN plans, if available.
     bool is_hopper =
         !config_.IsDeviceless() && GetComputeCapability().IsAtLeastHopper();
@@ -640,6 +818,23 @@ GemmFusionAutotunerImpl::GenerateConfigs(const HloFusionInstruction& fusion) {
       }
       return configs;
     }
+=======
+    // Add lib (e.g. cuDNN) plans, if available.
+    if (AddLibConfigs(fusion, dot, configs)) return configs;
+  }
+
+  // Add CustomKernelFusion (Cutlass) configs, if available.
+  // Go through all the instructions in the fusion body try to match them to
+  // a custom kernel fusion pattern.
+  if ((IsFusionKind(fusion, kCustomFusionKind) ||
+       IsFusionKind(fusion, kTritonGemmFusionKind)) &&
+      IsAutotuningEnabled() && !config_.IsDeviceless()) {
+    std::vector<BackendConfig> custom_kernel_fusion_configs =
+        GenerateCustomKernelFusionConfigs(fusion,
+                                          config_.GetDeviceDescription());
+    configs.insert(configs.end(), custom_kernel_fusion_configs.begin(),
+                   custom_kernel_fusion_configs.end());
+>>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
   }
 
   // Add triton configs.
@@ -693,12 +888,12 @@ GemmFusionAutotunerImpl::GenerateTritonConfigs(const HloDotInstruction& dot) {
   // a sufficient number of thread block programs to occupy all available cores.
   // Around 5 full waves completely avoid the need for split-K.
   // n_tiles = split_k * (M * N) / (block_m * block_n)
-  const int kCoreCount =
-      !config_.IsDeviceless()
-          ? config_.GetExecutor()->GetDeviceDescription().core_count()
-          : 100;  // some sensible default
+  const int kCoreCount = config_.GetDeviceDescription().core_count();
+  CHECK_GE(kCoreCount, 1);
   const int64_t kSufficientNumberOfTiles = kMaxWavesForSplitK * kCoreCount;
   const int64_t result_size = ShapeUtil::ElementsIn(dot.shape());
+  const int64_t threads_per_warp =
+      config_.GetDeviceDescription().threads_per_warp();
 
   // Triton configurations are adjusted and deduplicated.
   absl::flat_hash_set<TritonGemmConfig> added;
@@ -735,7 +930,7 @@ GemmFusionAutotunerImpl::GenerateTritonConfigs(const HloDotInstruction& dot) {
           2 * std::max(kMinTileSize, kLdmatrixGranularity / minBitWidth));
       int meta_elements = config.block_m * config.block_k / 16;
       config.num_warps =
-          std::min<int>(config.num_warps, meta_elements / WarpSize());
+          std::min<int>(config.num_warps, meta_elements / threads_per_warp);
     }
 
     if (added.insert(config).second) {
@@ -783,13 +978,13 @@ GemmFusionAutotunerImpl::CompileAll(AutotunerCompileUtil& compile_util,
       -> absl::StatusOr<bool> {
     std::unique_ptr<Executable> executable;
     if (std::holds_alternative<TritonGemmConfig>(config)) {
-      TF_ASSIGN_OR_RETURN(
-          executable, compile_util.Compile([&](const DebugOptions& opts) {
-            return TritonGemmAutotuneExtractor(
-                std::get<TritonGemmConfig>(config),
-                config_.GetExecutor()->GetDeviceDescription(), fusion, opts,
-                allow_filtering_kernels_spilling_registers);
-          }));
+      TF_ASSIGN_OR_RETURN(executable,
+                          compile_util.Compile([&](const DebugOptions& opts) {
+                            return TritonGemmAutotuneExtractor(
+                                std::get<TritonGemmConfig>(config),
+                                config_.GetDeviceDescription(), fusion, opts,
+                                allow_filtering_kernels_spilling_registers);
+                          }));
     } else if (std::holds_alternative<CuDnnConfig>(config)) {
       executable =
           compile_util
@@ -801,9 +996,9 @@ GemmFusionAutotunerImpl::CompileAll(AutotunerCompileUtil& compile_util,
     } else if (std::holds_alternative<CuBlasConfig>(config)) {
       TF_ASSIGN_OR_RETURN(
           executable, compile_util.Compile([&](const DebugOptions& opts) {
-            return CublasGemmAutotuneExtractor(
-                config_, config_.GetExecutor()->GetDeviceDescription(),
-                toolkit_version_, fusion, opts);
+            return CublasGemmAutotuneExtractor(config_,
+                                               config_.GetDeviceDescription(),
+                                               toolkit_version_, fusion, opts);
           }));
     } else {
       LOG(FATAL) << "Unsupported config type: " << config.index();
@@ -1001,9 +1196,21 @@ absl::StatusOr<std::vector<AutotuneResult>> GemmFusionAutotunerImpl::Profile(
 std::vector<TritonGemmConfig>
 GemmFusionAutotunerImpl::GetExhaustiveTritonConfigs() const {
   std::vector<TritonGemmConfig> configs;
+<<<<<<< HEAD
   se::CudaComputeCapability cc = GetComputeCapability();
   bool tune_ctas =
       debug_options_.xla_gpu_enable_triton_hopper() && cc.IsAtLeastHopper();
+=======
+  se::GpuComputeCapability gcc = GetComputeCapability();
+  bool tune_ctas = false;
+
+  if (!isRocm()) {
+    auto cc = std::get<se::CudaComputeCapability>(gcc);
+    debug_options_.xla_gpu_enable_triton_hopper() && cc.IsAtLeastHopper();
+  }
+  const int64_t threads_per_warp =
+      config_.GetDeviceDescription().threads_per_warp();
+>>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 
   for (int num_stages : kNumStages) {
     // Volta doesn't support num_stages > 2.
@@ -1017,7 +1224,7 @@ GemmFusionAutotunerImpl::GetExhaustiveTritonConfigs() const {
           const int tile_rhs = tile_k * tile_n;
           for (int num_warps : kNumWarps) {
             // Each thread should read at least one input element.
-            if (num_warps * WarpSize() > std::min(tile_lhs, tile_rhs)) {
+            if (num_warps * threads_per_warp > std::min(tile_lhs, tile_rhs)) {
               break;
             }
             for (int split_k : kSplitK) {
