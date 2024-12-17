@@ -62,7 +62,7 @@ struct GpuBlasLtAdaptor final : TBlasSupport {
 
   absl::Status DoBlasGemm(Stream *stream, blas::Transpose transa,
                           blas::Transpose transb, uint64_t m, uint64 n,
-                          uint64_t k, blas::DataType dtype, const void *alpha,
+                          uint64 k, blas::DataType dtype, const void *alpha,
                           const DeviceMemoryBase &a, int lda,
                           const DeviceMemoryBase &b, int ldb, const void *beta,
                           DeviceMemoryBase *c, int ldc,
