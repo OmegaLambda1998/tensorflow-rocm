@@ -34,6 +34,7 @@ limitations under the License.
 #include "xla/stream_executor/gpu/gpu_executor.h"
 #include "xla/stream_executor/gpu/gpu_helpers.h"
 #include "xla/stream_executor/gpu/gpu_stream.h"
+#include "xla/stream_executor/gpu/gpu_blas_lt_adaptor.h"
 #include "xla/stream_executor/platform/dso_loader.h"
 #include "xla/stream_executor/platform/initialize.h"
 #include "xla/stream_executor/platform/port.h"
@@ -1241,7 +1242,6 @@ IMPL_DoBlasGemmBatched(float, wrap::rocblas_sgemm_strided_batched)
 }
 
 absl::Status ROCMBlas::GetVersion(std::string *version) {
-
 #if TF_ROCM_VERSION >= 60200  // Not available in ROCM-6.1
   absl::MutexLock lock{&mu_};
   size_t len = 0;
@@ -1285,7 +1285,8 @@ void initialize_rocblas() {
                     return nullptr;
                   }
 
-                  gpu::ROCMBlas *blas = new gpu::ROCMBlas(rocm_executor);
+                  gpu::ROCMBlas *blas =
+                      new gpu::GpuBlasLtAdaptor<gpu::ROCMBlas>(rocm_executor);
                   if (!blas->Init()) {
                     // Note: Init() will log a more specific error.
                     delete blas;

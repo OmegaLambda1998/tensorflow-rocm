@@ -613,12 +613,12 @@ tsl_gpu_library(
         "gpu_cudamallocasync_allocator.cc",
     ],
     hdrs = ["gpu_cudamallocasync_allocator.h"],
-    local_defines = if_cuda_is_configured(["GOOGLE_CUDA=1"]) + if_rocm_is_configured([
-        "TENSORFLOW_USE_ROCM=1",
-    ]),
     cuda_deps = [
         "//xla/stream_executor/cuda:cuda_executor",
     ],
+    local_defines = if_cuda_is_configured(["GOOGLE_CUDA=1"]) + if_rocm_is_configured([
+        "TENSORFLOW_USE_ROCM=1",
+    ]),
     deps = [
         ":gpu_init_impl",
         "//xla/stream_executor:stream_executor_h",
@@ -685,6 +685,23 @@ cc_library(
         "@local_tsl//tsl/platform:tensor_float_32_hdr_lib",
     ]) + if_static([
         "@local_tsl//tsl/platform:tensor_float_32_utils",
+    ]),
+)
+
+cc_library(
+    name = "gpu_blas_lt_gemm_runner",
+    srcs = if_rocm_is_configured(["gpu_blas_lt_gemm_runner.cc"]),
+    hdrs = if_rocm_is_configured([
+        "gpu_blas_lt_gemm_runner.h",
+        "gpu_blas_lt_adaptor.h",
+    ]),
+    deps = if_rocm_is_configured([
+        "//xla:autotuning_proto_cc",
+        "//xla:autotune_results_proto_cc",
+        "//xla:xla_proto_cc",
+        "//xla/stream_executor:scratch_allocator",
+        "//xla:debug_options_flags",
+        ":gpu_blas_lt",
     ]),
 )
 
@@ -903,10 +920,10 @@ xla_test(
     local_defines = if_cuda_is_configured([
         'GPU_SPEC_FILE_NAMES=(std::string[]){\\"a100_pcie_80\\", \\"a100_sxm_40\\", \
          \\"a100_sxm_80\\", \\"a6000\\", \\"h100_pcie\\", \\"h100_sxm\\", \\"p100\\", \\"v100\\"}',
-         'PLATFORM_NAME=\\"CUDA\\"'
+        'PLATFORM_NAME=\\"CUDA\\"',
     ]) + if_rocm_is_configured([
         'GPU_SPEC_FILE_NAMES=(std::string[]){\\"mi200\\"}',
-        'PLATFORM_NAME=\\"ROCM\\"'
+        'PLATFORM_NAME=\\"ROCM\\"',
     ]),
     deps = [
         "//xla/service:platform_util",
