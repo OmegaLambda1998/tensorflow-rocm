@@ -49,7 +49,7 @@ TEST_F(ConcatenateEmitterTest, Simple) {
 ; CHECK-DAG: %[[ARG2:.*]] = addrspacecast ptr %arg2
 ; CHECK: %[[PTR:.*]] = getelementptr float, ptr addrspace(1) %[[ARG0]]
 ; CHECK-DAG: %[[VAL:.*]] = load float, ptr addrspace(1) %[[PTR]]
-; CHECK-DAG: %[[DST:.*]] = getelementptr inbounds [256 x float], ptr addrspace(1) %[[ARG2]]
+; CHECK-DAG: %[[DST:.*]] = getelementptr inbounds nuw [256 x float], ptr addrspace(1) %[[ARG2]]
 ; CHECK: store float %[[VAL]], ptr addrspace(1) %[[DST]]
 ; CHECK: %[[PTR:.*]] = getelementptr float, ptr addrspace(1) %[[ARG1]]
 ; CHECK-DAG: %[[VAL:.*]] = load float, ptr addrspace(1) %[[PTR]]
@@ -90,10 +90,10 @@ TEST_F(ConcatenateEmitterTest, PrologueAndEpilogue) {
 ; CHECK-DAG: %[[ARG3:.*]] = addrspacecast ptr %arg3
 ; CHECK: %[[PTR:.*]] = getelementptr float, ptr addrspace(1) %[[ARG0]]
 ; CHECK: %[[RHS:.*]] = load float, ptr addrspace(1) %[[PTR]]
-; CHECK: %[[SRC:.*]] = getelementptr inbounds [256 x float], ptr addrspace(1) %[[ARG2]]
+; CHECK: %[[SRC:.*]] = getelementptr inbounds nuw [256 x float], ptr addrspace(1) %[[ARG2]]
 ; CHECK: %[[LHS:.*]] = load float, ptr addrspace(1) %[[SRC]]
 ; CHECK: %[[VAL:.*]] = fsub float %[[LHS]], %[[RHS]]
-; CHECK: %[[DST:.*]] = getelementptr inbounds [256 x float], ptr addrspace(1) %[[ARG3]]
+; CHECK: %[[DST:.*]] = getelementptr inbounds nuw [256 x float], ptr addrspace(1) %[[ARG3]]
 ; CHECK: store float %[[VAL]], ptr addrspace(1) %[[DST]]
 ; CHECK: %[[PTR:.*]] = getelementptr float, ptr addrspace(1) %[[ARG1]]
 ; CHECK: %[[LHS:.*]] = load float, ptr addrspace(1) %[[PTR]]

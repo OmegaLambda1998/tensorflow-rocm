@@ -1,0 +1,272 @@
+diff --git a/examples/c++/ExampleAdd.cpp b/examples/c++/ExampleAdd.cpp
+index d90b8b3e..1161723a 100644
+--- a/examples/c++/ExampleAdd.cpp
++++ b/examples/c++/ExampleAdd.cpp
+@@ -18,7 +18,7 @@ limitations under the License.
+ #include "llvm/ADT/SmallVector.h"
+ #include "llvm/Support/LogicalResult.h"
+ #include "mlir/Dialect/Func/IR/FuncOps.h"
+-#include "mlir/Dialect/Quant/QuantOps.h"
++#include "mlir/Dialect/Quant/IR/Quant.h"
+ #include "mlir/IR/Attributes.h"
+ #include "mlir/IR/Block.h"
+ #include "mlir/IR/Builders.h"
+@@ -43,7 +43,7 @@ int main() {
+       mlir::ModuleOp::create(mlir::UnknownLoc::get(&context));
+   module->getContext()->loadDialect<mlir::func::FuncDialect>();
+   module->getContext()->loadDialect<mlir::stablehlo::StablehloDialect>();
+-  module->getContext()->loadDialect<mlir::quant::QuantDialect>();
++  module->getContext()->loadDialect<mlir::quant::QuantDialect>();
+   module->setName("test_module");
+ 
+   /** create function **/
+diff --git a/stablehlo/conversions/tosa/transforms/StablehloQuantLegalizeToTosaRescale.cpp b/stablehlo/conversions/tosa/transforms/StablehloQuantLegalizeToTosaRescale.cpp
+index 44d1a0c7..9d092446 100644
+--- a/stablehlo/conversions/tosa/transforms/StablehloQuantLegalizeToTosaRescale.cpp
++++ b/stablehlo/conversions/tosa/transforms/StablehloQuantLegalizeToTosaRescale.cpp
+@@ -17,7 +17,7 @@ limitations under the License.
+ #include <utility>
+ 
+ #include "mlir/Dialect/Func/IR/FuncOps.h"
+-#include "mlir/Dialect/Quant/QuantOps.h"
++#include "mlir/Dialect/Quant/IR/Quant.h"
+ #include "mlir/Dialect/Tosa/IR/TosaOps.h"
+ #include "mlir/Dialect/Tosa/Utils/ConversionUtils.h"
+ #include "mlir/Dialect/Tosa/Utils/QuantUtils.h"
+diff --git a/stablehlo/conversions/tosa/transforms/TosaRescaleLegalizeToStablehlo.cpp b/stablehlo/conversions/tosa/transforms/TosaRescaleLegalizeToStablehlo.cpp
+index 74013e43..214f035d 100644
+--- a/stablehlo/conversions/tosa/transforms/TosaRescaleLegalizeToStablehlo.cpp
++++ b/stablehlo/conversions/tosa/transforms/TosaRescaleLegalizeToStablehlo.cpp
+@@ -18,7 +18,7 @@ limitations under the License.
+ #include <utility>
+ 
+ #include "mlir/Dialect/Func/IR/FuncOps.h"
+-#include "mlir/Dialect/Quant/QuantOps.h"
++#include "mlir/Dialect/Quant/IR/Quant.h"
+ #include "mlir/Dialect/Tosa/IR/TosaOps.h"
+ #include "mlir/Dialect/Tosa/Utils/ConversionUtils.h"
+ #include "mlir/Dialect/Tosa/Utils/QuantUtils.h"
+diff --git a/stablehlo/dialect/Base.cpp b/stablehlo/dialect/Base.cpp
+index d8d13396..1f1811a0 100644
+--- a/stablehlo/dialect/Base.cpp
++++ b/stablehlo/dialect/Base.cpp
+@@ -31,7 +31,7 @@ limitations under the License.
+ #include "llvm/ADT/SmallVector.h"
+ #include "llvm/Support/Debug.h"
+ #include "llvm/Support/ErrorHandling.h"
+-#include "mlir/Dialect/Quant/QuantTypes.h"
++#include "mlir/Dialect/Quant/IR/QuantTypes.h"
+ #include "mlir/Dialect/Shape/IR/Shape.h"
+ #include "mlir/IR/Builders.h"
+ #include "mlir/IR/BuiltinAttributes.h"
+diff --git a/stablehlo/dialect/ChloOps.h b/stablehlo/dialect/ChloOps.h
+index 988c6721..33c3de53 100644
+--- a/stablehlo/dialect/ChloOps.h
++++ b/stablehlo/dialect/ChloOps.h
+@@ -20,7 +20,7 @@ limitations under the License.
+ #include "llvm/ADT/APFloat.h"
+ #include "llvm/ADT/StringRef.h"
+ #include "mlir/Bytecode/BytecodeOpInterface.h"
+-#include "mlir/Dialect/Quant/QuantTypes.h"
++#include "mlir/Dialect/Quant/IR/QuantTypes.h"
+ #include "mlir/IR/Attributes.h"
+ #include "mlir/IR/Builders.h"
+ #include "mlir/IR/BuiltinTypes.h"
+diff --git a/stablehlo/dialect/Register.cpp b/stablehlo/dialect/Register.cpp
+index b19bb031..b839ed3c 100644
+--- a/stablehlo/dialect/Register.cpp
++++ b/stablehlo/dialect/Register.cpp
+@@ -17,7 +17,7 @@ limitations under the License.
+ #include "stablehlo/dialect/Register.h"
+ 
+ #include "mlir/Dialect/Func/IR/FuncOps.h"
+-#include "mlir/Dialect/Quant/QuantOps.h"
++#include "mlir/Dialect/Quant/IR/Quant.h"
+ #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
+ #include "mlir/IR/DialectRegistry.h"
+ #include "stablehlo/dialect/ChloOps.h"
+@@ -30,7 +30,7 @@ namespace stablehlo {
+ void registerAllDialects(mlir::DialectRegistry &registry) {
+   // clang-format off
+   registry.insert<mlir::func::FuncDialect,
+-                  mlir::quant::QuantDialect,
++                  mlir::quant::QuantDialect,
+                   mlir::sparse_tensor::SparseTensorDialect>();
+   registry.insert<mlir::chlo::ChloDialect,
+                   mlir::stablehlo::StablehloDialect,
+diff --git a/stablehlo/dialect/StablehloOps.cpp b/stablehlo/dialect/StablehloOps.cpp
+index 8d9f333a..f36dfeb1 100644
+--- a/stablehlo/dialect/StablehloOps.cpp
++++ b/stablehlo/dialect/StablehloOps.cpp
+@@ -52,7 +52,7 @@ limitations under the License.
+ #include "llvm/Support/Regex.h"
+ #include "mlir/Dialect/Arith/IR/Arith.h"
+ #include "mlir/Dialect/Complex/IR/Complex.h"
+-#include "mlir/Dialect/Quant/QuantTypes.h"
++#include "mlir/Dialect/Quant/IR/QuantTypes.h"
+ #include "mlir/Dialect/Shape/IR/Shape.h"
+ #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
+ #include "mlir/Dialect/Tensor/IR/Tensor.h"
+diff --git a/stablehlo/dialect/StablehloOps.h b/stablehlo/dialect/StablehloOps.h
+index 3ad14df9..cc5cd76e 100644
+--- a/stablehlo/dialect/StablehloOps.h
++++ b/stablehlo/dialect/StablehloOps.h
+@@ -21,7 +21,7 @@ limitations under the License.
+ #include <optional>
+ 
+ #include "llvm/ADT/StringRef.h"
+-#include "mlir/Dialect/Quant/QuantTypes.h"
++#include "mlir/Dialect/Quant/IR/QuantTypes.h"
+ #include "mlir/Dialect/Shape/IR/Shape.h"
+ #include "mlir/IR/Attributes.h"
+ #include "mlir/IR/Builders.h"
+diff --git a/stablehlo/dialect/TypeInference.cpp b/stablehlo/dialect/TypeInference.cpp
+index 15671d73..ffe55992 100644
+--- a/stablehlo/dialect/TypeInference.cpp
++++ b/stablehlo/dialect/TypeInference.cpp
+@@ -52,7 +52,7 @@ limitations under the License.
+ #include "llvm/Support/Regex.h"
+ #include "llvm/Support/raw_ostream.h"
+ #include "mlir/Dialect/Func/IR/FuncOps.h"
+-#include "mlir/Dialect/Quant/QuantTypes.h"
++#include "mlir/Dialect/Quant/IR/QuantTypes.h"
+ #include "mlir/IR/Attributes.h"
+ #include "mlir/IR/Builders.h"
+ #include "mlir/IR/BuiltinAttributes.h"
+diff --git a/stablehlo/dialect/VhloTypes.cpp b/stablehlo/dialect/VhloTypes.cpp
+index bbbb1af8..251c163c 100644
+--- a/stablehlo/dialect/VhloTypes.cpp
++++ b/stablehlo/dialect/VhloTypes.cpp
+@@ -20,7 +20,7 @@ limitations under the License.
+ #include "llvm/ADT/SmallVectorExtras.h"
+ #include "llvm/ADT/StringRef.h"
+ #include "llvm/ADT/TypeSwitch.h"
+-#include "mlir/Dialect/Quant/QuantTypes.h"
++#include "mlir/Dialect/Quant/IR/QuantTypes.h"
+ #include "mlir/Dialect/Shape/IR/Shape.h"
+ #include "mlir/IR/Attributes.h"
+ #include "mlir/IR/BuiltinTypes.h"
+diff --git a/stablehlo/reference/Api.cpp b/stablehlo/reference/Api.cpp
+index 3366d4f6..55721fa0 100644
+--- a/stablehlo/reference/Api.cpp
++++ b/stablehlo/reference/Api.cpp
+@@ -31,7 +31,7 @@ limitations under the License.
+ #include "llvm/Support/Path.h"
+ #include "llvm/Support/SourceMgr.h"
+ #include "mlir/Dialect/Func/IR/FuncOps.h"
+-#include "mlir/Dialect/Quant/QuantTypes.h"
++#include "mlir/Dialect/Quant/IR/QuantTypes.h"
+ #include "mlir/IR/BuiltinAttributes.h"
+ #include "mlir/IR/BuiltinOps.h"
+ #include "mlir/IR/BuiltinTypeInterfaces.h"
+diff --git a/stablehlo/tests/CheckOps.h b/stablehlo/tests/CheckOps.h
+index 1cd70102..01c448d2 100644
+--- a/stablehlo/tests/CheckOps.h
++++ b/stablehlo/tests/CheckOps.h
+@@ -17,7 +17,7 @@ limitations under the License.
+ #define STABLEHLO_DIALECT_CHECKOPS_H_
+ 
+ #include "mlir/Bytecode/BytecodeOpInterface.h"
+-#include "mlir/Dialect/Quant/QuantTypes.h"
++#include "mlir/Dialect/Quant/IR/QuantTypes.h"
+ #include "mlir/IR/BuiltinAttributes.h"
+ #include "mlir/IR/BuiltinTypes.h"
+ #include "mlir/IR/Dialect.h"
+diff --git a/stablehlo/tools/StablehloTranslateMain.cpp b/stablehlo/tools/StablehloTranslateMain.cpp
+index 107f5adb..3b1252a1 100644
+--- a/stablehlo/tools/StablehloTranslateMain.cpp
++++ b/stablehlo/tools/StablehloTranslateMain.cpp
+@@ -24,7 +24,7 @@ limitations under the License.
+ #include "llvm/Support/ErrorHandling.h"
+ #include "llvm/Support/LogicalResult.h"
+ #include "mlir/Dialect/Func/IR/FuncOps.h"
+-#include "mlir/Dialect/Quant/QuantOps.h"
++#include "mlir/Dialect/Quant/IR/Quant.h"
+ #include "mlir/IR/BuiltinAttributes.h"
+ #include "mlir/IR/BuiltinOps.h"
+ #include "mlir/IR/DialectRegistry.h"
+@@ -237,7 +237,7 @@ TranslateFromMLIRRegistration interpretRegistration(
+     },
+     [](DialectRegistry &registry) {
+       registry.insert<func::FuncDialect>();
+-      registry.insert<quant::QuantDialect>();
++      registry.insert<quant::QuantDialect>();
+       registry.insert<stablehlo::check::CheckDialect>();
+       registry.insert<stablehlo::interpreter::InterpreterDialect>();
+       registry.insert<stablehlo::StablehloDialect>();
+diff --git a/stablehlo/transforms/Passes.h b/stablehlo/transforms/Passes.h
+index 0bbb48cf..25c71d11 100644
+--- a/stablehlo/transforms/Passes.h
++++ b/stablehlo/transforms/Passes.h
+@@ -19,7 +19,7 @@ limitations under the License.
+ #include <memory>
+ 
+ #include "mlir/Dialect/Func/IR/FuncOps.h"
+-#include "mlir/Dialect/Quant/QuantOps.h"
++#include "mlir/Dialect/Quant/IR/Quant.h"
+ #include "mlir/Dialect/Shape/IR/Shape.h"
+ #include "mlir/IR/BuiltinOps.h"
+ #include "mlir/Pass/Pass.h"
+diff --git a/stablehlo/transforms/Passes.td b/stablehlo/transforms/Passes.td
+index cf45240f..0b251de4 100644
+--- a/stablehlo/transforms/Passes.td
++++ b/stablehlo/transforms/Passes.td
+@@ -68,7 +68,7 @@ def VhloLegalizeToStablehloPass : Pass<"vhlo-legalize-to-stablehlo", "ModuleOp">
+   let summary = "Legalize VHLO to StableHLO.";
+   let dependentDialects = [
+     "mlir::func::FuncDialect",
+-    "mlir::quant::QuantDialect",
++    "mlir::quant::QuantDialect",
+     "mlir::shape::ShapeDialect",
+     "mlir::stablehlo::StablehloDialect",
+   ];
+diff --git a/stablehlo/transforms/StablehloLegalizeQDQToQuantizedOp.cpp b/stablehlo/transforms/StablehloLegalizeQDQToQuantizedOp.cpp
+index 470093e4..96492219 100644
+--- a/stablehlo/transforms/StablehloLegalizeQDQToQuantizedOp.cpp
++++ b/stablehlo/transforms/StablehloLegalizeQDQToQuantizedOp.cpp
+@@ -15,7 +15,7 @@ limitations under the License.
+ 
+ #include "llvm/ADT/SmallVector.h"
+ #include "mlir/Dialect/Func/IR/FuncOps.h"
+-#include "mlir/Dialect/Quant/QuantTypes.h"
++#include "mlir/Dialect/Quant/IR/QuantTypes.h"
+ #include "mlir/IR/Operation.h"
+ #include "mlir/IR/PatternMatch.h"
+ #include "mlir/Transforms/DialectConversion.h"  // Include for TypeConverter
+diff --git a/stablehlo/transforms/StablehloLegalizeQuantToMath.cpp b/stablehlo/transforms/StablehloLegalizeQuantToMath.cpp
+index 69089d4f..35e3c15b 100644
+--- a/stablehlo/transforms/StablehloLegalizeQuantToMath.cpp
++++ b/stablehlo/transforms/StablehloLegalizeQuantToMath.cpp
+@@ -24,8 +24,8 @@ limitations under the License.
+ #include "llvm/ADT/SmallVector.h"
+ #include "mlir/Dialect/Func/IR/FuncOps.h"
+ #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
+-#include "mlir/Dialect/Quant/QuantOps.h"
+-#include "mlir/Dialect/Quant/QuantTypes.h"
++#include "mlir/Dialect/Quant/IR/Quant.h"
++#include "mlir/Dialect/Quant/IR/QuantTypes.h"
+ #include "mlir/IR/Attributes.h"
+ #include "mlir/IR/BuiltinAttributes.h"
+ #include "mlir/IR/BuiltinTypeInterfaces.h"
+@@ -1331,7 +1331,7 @@ class StablehloLegalizeQuantToMathPass
+     populateReturnOpTypeConversionPattern(patterns, converter);
+ 
+     ConversionTarget target(*op->getContext());
+-    target.addIllegalDialect<quant::QuantDialect>();
++    target.addIllegalDialect<quant::QuantDialect>();
+     auto isLegal = [&converter](Operation *op) {
+       return converter.isLegal(op);
+     };
+diff --git a/stablehlo/transforms/StablehloLegalizeQuantizedOpToQDQ.cpp b/stablehlo/transforms/StablehloLegalizeQuantizedOpToQDQ.cpp
+index e9eebea7..9fae84f9 100644
+--- a/stablehlo/transforms/StablehloLegalizeQuantizedOpToQDQ.cpp
++++ b/stablehlo/transforms/StablehloLegalizeQuantizedOpToQDQ.cpp
+@@ -17,7 +17,7 @@ limitations under the License.
+ 
+ #include "llvm/ADT/STLExtras.h"
+ #include "mlir/Dialect/Func/IR/FuncOps.h"
+-#include "mlir/Dialect/Quant/QuantTypes.h"
++#include "mlir/Dialect/Quant/IR/QuantTypes.h"
+ #include "mlir/IR/BuiltinTypeInterfaces.h"
+ #include "mlir/IR/PatternMatch.h"
+ #include "mlir/IR/TypeRange.h"

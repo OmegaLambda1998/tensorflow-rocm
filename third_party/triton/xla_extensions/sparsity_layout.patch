@@ -1,11 +1,66 @@
+diff --git a/lib/Analysis/AxisInfo.cpp b/lib/Analysis/AxisInfo.cpp
+index b4f1a5dcf..3edb9ff74 100644
+--- a/lib/Analysis/AxisInfo.cpp
++++ b/lib/Analysis/AxisInfo.cpp
+@@ -1079,8 +1079,11 @@ LogicalResult AxisInfoAnalysis::visitOperation(
+ 
+ void AxisInfoAnalysis::visitForOpInductionVar(
+     scf::ForOp op, ArrayRef<dataflow::Lattice<AxisInfo> *> argLattices) {
+-  auto lb = getLatticeElementFor(op, op.getLowerBound())->getValue();
+-  auto step = getLatticeElementFor(op, op.getStep())->getValue();
++  ProgramPoint *programPoint = getProgramPointAfter(op);
++  const auto &lb =
++      getLatticeElementFor(programPoint, op.getLowerBound())->getValue();
++  const auto &step =
++      getLatticeElementFor(programPoint, op.getStep())->getValue();
+ 
+   AxisInfo::DimVectorT knownContiguity(1, 1);
+   AxisInfo::DimVectorT knownDivisibility(1, 1);
+diff --git a/lib/Analysis/Utility.cpp b/lib/Analysis/Utility.cpp
+index 679dcc88d..ad0d07db5 100644
+--- a/lib/Analysis/Utility.cpp
++++ b/lib/Analysis/Utility.cpp
+@@ -816,24 +816,25 @@ SetVector<Operation *> multiRootGetSlice(Operation *op,
+ }
+ 
+ namespace {
+-// Copied from TestDeadCodeAnalysis.cpp, because some dead code analysis
++  // Copied from TestDeadCodeAnalysis.cpp, because some dead code analysis
+ // interacts with constant propagation, but SparseConstantPropagation
+ // doesn't seem to be sufficient.
+-class ConstantAnalysis : public DataFlowAnalysis {
++  class ConstantAnalysis : public DataFlowAnalysis {
+ public:
+   using DataFlowAnalysis::DataFlowAnalysis;
+ 
+   LogicalResult initialize(Operation *top) override {
+     WalkResult result = top->walk([&](Operation *op) {
+-      if (failed(visit(op)))
++      ProgramPoint programPoint(op);
++      if (failed(visit(&programPoint)))
+         return WalkResult::interrupt();
+       return WalkResult::advance();
+     });
+     return success(!result.wasInterrupted());
+   }
+ 
+-  LogicalResult visit(ProgramPoint point) override {
+-    Operation *op = point.get<Operation *>();
++  LogicalResult visit(ProgramPoint *point) override {
++    Operation *op = point->getOperation();
+     Attribute value;
+     if (matchPattern(op, m_Constant(&value))) {
+       auto *constant = getOrCreate<dataflow::Lattice<dataflow::ConstantValue>>(
 diff --git a/lib/Conversion/TritonToTritonGPU/TritonGPUConversion.cpp b/lib/Conversion/TritonToTritonGPU/TritonGPUConversion.cpp
-index 34fb89954..a0172e107 100644
+index 34fb89954..28d3488d6 100644
 --- a/lib/Conversion/TritonToTritonGPU/TritonGPUConversion.cpp
 +++ b/lib/Conversion/TritonToTritonGPU/TritonGPUConversion.cpp
-@@ -57,6 +57,12 @@ TritonGPUTypeConverter::TritonGPUTypeConverter(MLIRContext *context,
+@@ -56,20 +56,32 @@ TritonGPUTypeConverter::TritonGPUTypeConverter(MLIRContext *context,
+   // This will create newArg, and map(origArg, newArg)
    addArgumentMaterialization([&](OpBuilder &builder,
                                   RankedTensorType tensorType, ValueRange inputs,
-                                  Location loc) -> std::optional<Value> {
+-                                 Location loc) -> std::optional<Value> {
++                                 Location loc) -> Value {
 +    // Allows partial TTIR to TTGIR conversion by materializing a conversion for
 +    // remaining arguments that have been converted to a new type.
 +    // We use this to rewrite triton_gpu.sparse_dot in a separate pass after
@@ -14,11 +69,16 @@ index 34fb89954..a0172e107 100644
 +                                                        inputs);
      llvm_unreachable("Argument rematerialization should not happen in Triton "
                       "-> TritonGPU conversion");
-     return std::nullopt;
-@@ -67,6 +73,12 @@ TritonGPUTypeConverter::TritonGPUTypeConverter(MLIRContext *context,
+-    return std::nullopt;
++    return {};
+   });
+ 
+   // If the origValue still has live user(s), use this to
+   // convert origValue to newValue
    addSourceMaterialization([&](OpBuilder &builder, RankedTensorType tensorType,
                                 ValueRange inputs,
-                                Location loc) -> std::optional<Value> {
+-                               Location loc) -> std::optional<Value> {
++                               Location loc) -> Value {
 +    // Allows partial TTIR to TTGIR conversion by materializing a conversion for
 +    // remaining uses of values that have been converted to a new type.
 +    // We use this to rewrite triton_gpu.sparse_dot in a separate pass after
@@ -27,12 +87,25 @@ index 34fb89954..a0172e107 100644
 +                                                        inputs);
      llvm_unreachable("Source rematerialization should not happen in Triton -> "
                       "TritonGPU Conversion");
-     return std::nullopt;
+-    return std::nullopt;
++    return {};
+   });
+ 
+   // This will be called when (desiredType != newOperandType)
+@@ -79,7 +91,7 @@ TritonGPUTypeConverter::TritonGPUTypeConverter(MLIRContext *context,
+                                ValueRange inputs, Location loc) {
+     auto cast =
+         builder.create<triton::gpu::ConvertLayoutOp>(loc, tensorType, inputs);
+-    return std::optional<Value>(cast.getResult());
++    return cast.getResult();
+   });
+ }
+ 
 diff --git a/lib/Dialect/TritonGPU/IR/Dialect.cpp b/lib/Dialect/TritonGPU/IR/Dialect.cpp
-index df3d3b042..e38c184f6 100644
+index c0ca4ebfc..4f9dcf5d0 100644
 --- a/lib/Dialect/TritonGPU/IR/Dialect.cpp
 +++ b/lib/Dialect/TritonGPU/IR/Dialect.cpp
-@@ -2867,13 +2879,13 @@ struct CanonicalizeConvertFromConvert
+@@ -2784,13 +2784,13 @@ struct CanonicalizeConvertFromConvert
      // heuristic to accommodate fused attention.
      auto srcType = op.getSrc().getType();
      auto dstType = op.getType();
@@ -50,3 +123,17 @@ index df3d3b042..e38c184f6 100644
          llvm::any_of(op.getResult().getUsers(), [](Operation *dot) {
            return dot->hasTrait<OpTrait::DotLike>();
          })) {
+diff --git a/lib/Target/LLVMIR/LLVMDIScope.cpp b/lib/Target/LLVMIR/LLVMDIScope.cpp
+index 536b41126..4aa9828cd 100644
+--- a/lib/Target/LLVMIR/LLVMDIScope.cpp
++++ b/lib/Target/LLVMIR/LLVMDIScope.cpp
+@@ -104,7 +104,8 @@ struct LLVMDIScopePass : public LLVMDIScopeBase<LLVMDIScopePass> {
+     auto subprogramAttr = LLVM::DISubprogramAttr::get(
+         context, distinctId, compileUnitAttr, fileAttr, funcNameAttr,
+         funcNameAttr, fileAttr, /*line=*/line, /*scopeline=*/line,
+-        subprogramFlags, subroutineTypeAttr, /*retainNodes=*/{});
++        subprogramFlags, subroutineTypeAttr, /*retainNodes=*/{},
++        /*annotations=*/{});
+     funcOp->setLoc(FusedLoc::get(context, {loc}, subprogramAttr));
+   }
+ 

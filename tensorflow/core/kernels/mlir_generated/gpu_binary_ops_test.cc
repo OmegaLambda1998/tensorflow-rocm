@@ -1046,6 +1046,12 @@ GENERATE_DEFAULT_TESTS(Mul, /*test_name=*/UInt64, uint64_t, uint64_t,
                        baseline_mul,
                        test::OpsTestConfig().ExpectStrictlyEqual())
 
+template <typename T>
+std::complex<T> baseline_cmulf(std::complex<T> lhs, std::complex<T> rhs) {
+  return std::complex<T>(lhs.real() * rhs.real() - lhs.imag() * rhs.imag(),
+                         lhs.real() * rhs.imag() + lhs.imag() * rhs.real());
+}
+
 // The following tests don't work with Eigen kernels if the Eigen kernels are
 // compiled with nvcc.
 #if defined(MLIR_GENERATED_GPU_KERNELS_ENABLED)
@@ -1056,7 +1062,7 @@ TEST_F(BinaryOpsTest, MulComplex64SpecialCases) {
       test::NearZeroInfAndNanInput<std::complex<float>>(),
       test::RepeatElements(test::NearZeroInfAndNanInput<std::complex<float>>(),
                            64),
-      baseline_mul, test::OpsTestConfig());
+      baseline_cmulf, test::OpsTestConfig());
 }
 
 TEST_F(BinaryOpsTest, MulComplex128SpecialCases) {
@@ -1066,7 +1072,7 @@ TEST_F(BinaryOpsTest, MulComplex128SpecialCases) {
       test::NearZeroInfAndNanInput<std::complex<double>>(),
       test::RepeatElements(test::NearZeroInfAndNanInput<std::complex<double>>(),
                            64),
-      baseline_mul, test::OpsTestConfig());
+      baseline_cmulf, test::OpsTestConfig());
 }
 #endif
 

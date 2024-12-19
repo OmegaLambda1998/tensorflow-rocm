@@ -710,9 +710,7 @@ class RewriteAtomicRMW : public mlir::OpRewritePattern<AtomicRMWOp> {
       case ml::AtomicBinOp::xchg: {
         rewriter.create<ml::StoreOp>(
             loc, modifier_arg, addr,
-            /*alignment=*/element_type.getIntOrFloatBitWidth() / 8,
-            /*volatile*/ false, /*isNonTemporal=*/false,
-            ml::AtomicOrdering::unordered);
+            /*alignment=*/element_type.getIntOrFloatBitWidth() / 8);
         return success();
       }
       case ml::AtomicBinOp::add:

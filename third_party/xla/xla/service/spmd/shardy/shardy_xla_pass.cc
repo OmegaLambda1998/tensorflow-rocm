@@ -369,16 +369,13 @@ absl::StatusOr<bool> ShardyXLA::Run(
                                      useTupleArgs);
 
   if (runSdyShardingPropagation) {
-    // Shardy is currently operating on stablehlo, since this is what JAX
-    // emits. Long term shardy will be fully dialect agnostic, and both mhlo
-    // and stablehlo can register their ops for sdy propagation.
-    pm.addPass(mlir::mhlo::createHloLegalizeToStablehloPass());
-    // NOTE: if we are using auto-spmd, we will use conservative propagation
+	// NOTE: if we are using auto-spmd, we will use conservative propagation
     // since the TOAST cost model cannot account for split axes or padding.
-    mlir::sdy::addPropagationPipeline(
-        pm, shardyDir,
-        /*conservativePropagation=*/hloModule->use_auto_spmd_partitioning());
-    pm.addPass(mlir::mhlo::createStablehloLegalizeToHloPass());
+
+    mlir::sdy::PropagationOptions options;
+    options.dumpDirectory = shardyDir;
+    options.conservativePropagation = hloModule->use_auto_spmd_partitioning();
+    mlir::sdy::addPropagationPipeline(pm, options);
   }
   addMhloExportPipeline(pm);
   pm.addPass(mlir::sdy::createSaveModuleOpPass(shardyDir,

@@ -41,6 +41,7 @@ limitations under the License.
 #include "llvm/ExecutionEngine/Orc/Shared/ExecutorSymbolDef.h"
 #include "llvm/ExecutionEngine/Orc/SymbolStringPool.h"
 #include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
+#include "llvm/ExecutionEngine/Orc/AbsoluteSymbols.h"
 #include "llvm/ExecutionEngine/RTDyldMemoryManager.h"
 #include "llvm/ExecutionEngine/RuntimeDyld.h"
 #include "llvm/ExecutionEngine/SectionMemoryManager.h"
@@ -386,7 +387,8 @@ SimpleOrcJIT::SimpleOrcJIT(
         }
       }
 
-      cantFail(jit_dylib.define(absoluteSymbols(std::move(new_defs))));
+	  cantFail(
+          jit_dylib.define(llvm::orc::absoluteSymbols(std::move(new_defs))));
       return llvm::Error::success();
     }
   };

@@ -27,6 +27,7 @@ class MLIRContext;
 class ConversionTarget;
 class DialectRegistry;
 class PassManager;
+class TypeConverter;
 
 namespace func {
 class FuncOp;
@@ -37,7 +38,7 @@ class BufferizeTypeConverter;
 
 using BufferizeDialectsCallback = std::function<void(DialectRegistry&)>;
 using BufferizePatternsCallback = std::function<void(
-    ConversionTarget&, MLIRContext*, bufferization::BufferizeTypeConverter*,
+    ConversionTarget&, MLIRContext*, mlir::TypeConverter*,
     RewritePatternSet*)>;
 
 //===----------------------------------------------------------------------===//
