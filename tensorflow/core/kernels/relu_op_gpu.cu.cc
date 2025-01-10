@@ -305,7 +305,6 @@ struct Gelu<GPUDevice, T> {
     TF_CHECK_OK(GpuLaunchKernel(
         GeluKernel<T>, (count + kThreadInBlock - 1) / kThreadInBlock,
         kThreadInBlock, 0, d.stream(), input.data(), output.data(), count));
-    gpuDeviceSynchronize();
   }
 };
 
@@ -321,7 +320,6 @@ struct GeluGrad<GPUDevice, T> {
                                 (count + kThreadInBlock - 1) / kThreadInBlock,
                                 kThreadInBlock, 0, d.stream(), gradient.data(),
                                 feature.data(), backprop.data(), count));
-    gpuDeviceSynchronize();
   }
 };
 
