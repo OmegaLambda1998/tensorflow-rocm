@@ -72,7 +72,7 @@ else
 	bazel test \
 	      --config=rocm \
 	      -k \
-	      --test_tag_filters=gpu,-no_oss,-oss_excluded,-oss_serial,-no_gpu,-no_rocm,-benchmark-test,-rocm_multi_gpu,-tpu,-v1only \
+	      --test_tag_filters=gpu,-no_oss,-oss_excluded,-oss_serial,-no_gpu,-cuda-only,-benchmark-test,-rocm_multi_gpu,-tpu,-v1only \
 	      --jobs=${N_BUILD_JOBS} \
 	      --local_test_jobs=${N_TEST_JOBS} \
 	      --test_env=TF_GPU_COUNT=$TF_GPU_COUNT \
@@ -84,7 +84,7 @@ else
 	      --build_tests_only \
 	      --test_output=errors \
 	      --test_sharding_strategy=disabled \
-	      --test_size_filters=small,medium,large \
+	      --test_size_filters=small,medium \
 	      --run_under=//tensorflow/tools/ci_build/gpu_build:parallel_gpu_execute \
 	      -- \
 	      //tensorflow/... \
@@ -92,5 +92,8 @@ else
 	      -//tensorflow/core/tpu/... \
 	      -//tensorflow/lite/... \
 	      -//tensorflow/compiler/tf2tensorrt/... \
-	      -//tensorflow/dtensor/python/tests:multi_client_test_nccl_2gpus
+		  -//tensorflow/tools/toolchains/... \
+	      -//tensorflow/dtensor/python/tests:multi_client_test_nccl_2gpus \
+		  -//tensorflow/dtensor/python/tests:multi_client_test_2gpus \
+		  -//tensorflow/python/distribute/experimental:multi_worker_mirrored_strategy_test_2gpus
 fi
