@@ -109,7 +109,7 @@ __global__ void xla_fp8_e4m3fnuz_comparison(__hip_fp8_storage_t* buffer_a,
                                             float rel_error_threshold,
                                             uint64_t buffer_length,
                                             int* mismatch_count) {
-#if defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__) 
+#if defined(__gfx942__) 
 // NOTE: according to amd_hip_fp8.h, GFX1200 and GFX1201 support ocp __hip_fp8_e4m3 
 // but not __hip_fp8_e4m3_fnuz
 
@@ -139,7 +139,7 @@ __global__ void xla_fp8_e5m2fnuz_comparison(__hip_fp8_storage_t* buffer_a,
                                             float rel_error_threshold,
                                             uint64_t buffer_length,
                                             int* mismatch_count) {
-#if defined(__gfx940__) || defined(__gfx941__) || defined(__gfx942__) 
+#if defined(__gfx942__) 
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   if (idx >= buffer_length) return;
   __hip_fp8_e5m2_fnuz elem_a_fp8, elem_b_fp8;
