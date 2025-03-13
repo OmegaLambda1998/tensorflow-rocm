@@ -92,8 +92,9 @@ else
 	      -//tensorflow/core/tpu/... \
 	      -//tensorflow/lite/... \
 	      -//tensorflow/compiler/tf2tensorrt/... \
-		  -//tensorflow/tools/toolchains/... \
+	      -//tensorflow/tools/toolchains/... \
 	      -//tensorflow/dtensor/python/tests:multi_client_test_nccl_2gpus \
-		  -//tensorflow/dtensor/python/tests:multi_client_test_2gpus \
-		  -//tensorflow/python/distribute/experimental:multi_worker_mirrored_strategy_test_2gpus
+              -//tensorflow/dtensor/python/tests:multi_client_test_2gpus \
+	      -//tensorflow/dtensor/python/tests:multi_client_test_nccl_local_2gpus \
+	      -//tensorflow/python/distribute/experimental:multi_worker_mirrored_strategy_test_2gpus
 fi
