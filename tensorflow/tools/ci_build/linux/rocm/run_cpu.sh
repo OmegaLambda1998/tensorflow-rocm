@@ -28,7 +28,6 @@ export PYTHON_BIN_PATH=`which python3`
 PYTHON_VERSION=`python3 -c "import sys;print(f'{sys.version_info.major}.{sys.version_info.minor}')"`
 export TF_PYTHON_VERSION=$PYTHON_VERSION
 
-export TF_NEED_ROCM=0
 
 if [ -f /usertools/cpu.bazelrc ]; then
         # Use the bazelrc files in /usertools if available
@@ -39,7 +38,7 @@ if [ -f /usertools/cpu.bazelrc ]; then
           --config=pycpp \
           --action_env=TF_PYTHON_VERSION=$PYTHON_VERSION \
           --local_test_jobs=${N_BUILD_JOBS} \
-          --jobs=${N_BUILD_JOBS}
+          --jobs=${N_BUILD_JOBS} --test_env=HIP_VISIBLE_DEVICES= --action_env=TF_NEED_ROCM=0
 else
          yes "" | $PYTHON_BIN_PATH configure.py
 
@@ -49,7 +48,7 @@ else
               -k \
               --test_tag_filters=-no_oss,-oss_excluded,-oss_serial,-gpu,-multi_gpu,-tpu,-no_rocm,-benchmark-test,-v1only \
               --test_lang_filters=cc,py \
-              --jobs=${N_BUILD_JOBS} \
+              --jobs=${N_BUILD_JOBS} --test_env=HIP_VISIBLE_DEVICES= --action_env=TF_NEED_ROCM=0 \
               --local_test_jobs=${N_BUILD_JOBS} \
               --test_timeout 920,2400,7200,9600 \
               --config=opt \
