@@ -72,8 +72,14 @@ def _get_cxx_inc_directories_impl(repository_ctx, cc, lang_is_cpp, tf_sys_root):
     sysroot = []
     if tf_sys_root:
         sysroot += ["--sysroot", tf_sys_root]
+    no_canonical_prefixes_supported = _is_compiler_option_supported(
+        repository_ctx,
+        cc,
+        "-no-canonical-prefixes",
+    )
+    no_canonical_prefixes = (["-no-canonical-prefixes"] if no_canonical_prefixes_supported else [])
     result = raw_exec(repository_ctx, [cc, "-E", "-x" + lang, "-", "-v"] +
-                                      sysroot)
+                                      sysroot + no_canonical_prefixes)
     stderr = err_out(result)
     index1 = stderr.find(_INC_DIR_MARKER_BEGIN)
     if index1 == -1:
@@ -148,7 +154,7 @@ def _get_cxx_inc_directories_impl(repository_ctx, cc, lang_is_cpp, tf_sys_root):
         compiler_includes = compiler_includes + unresolved_compiler_includes
     return compiler_includes
 
-def get_cxx_inc_directories(repository_ctx, cc, tf_sys_root):
+def get_cxx_inc_directories(repository_ctx, cc, tf_sys_root = None):
     """Compute the list of default C and C++ include directories."""
 
     # For some reason `clang -xc` sometimes returns include paths that are
