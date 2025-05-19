@@ -2,9 +2,11 @@
 ARG DISTRO_IMG
 #FROM ${DISTRO_IMG:-'compute-artifactory.amd.com:5000/rocm-base-images/debian-10:2025022301-6.4-47'} as runtime
 #FROM ${DISTRO_IMG:-'compute-artifactory.amd.com:5000/rocm-base-images/debian-10:2025032101-6.5-15845'} as runtime
-FROM ${DISTRO_IMG:-'compute-artifactory.amd.com:5000/rocm-base-images/debian-10:2025022301-6.4.1-60'} as runtime
+#FROM ${DISTRO_IMG:-'compute-artifactory.amd.com:5000/rocm-base-images/debian-10:2025022301-6.4.1-60'} as runtime
+FROM ${DISTRO_IMG:-'debian:buster-20240612'} as runtime
 ################################################################################
 
+ARG GPU_DEVICE_TARGETS
 # Note: Ubuntu Noble as Python 3.12 installed by default
 #
 # Install dependencies
@@ -19,6 +21,7 @@ ARG ROCM_VERSION=6.4.0
 ARG CUSTOM_INSTALL
 ARG ROCM_PATH=/opt/rocm-${ROCM_VERSION}
 ENV ROCM_PATH=${ROCM_PATH}
+COPY ${CUSTOM_INSTALL} /${CUSTOM_INSTALL}
 RUN mkdir /${TF_PKGS_DIR}
 COPY ${TF_PKGS_DIR}/${TENSORFLOW_PACKAGE} /${TF_PKGS_DIR}/${TENSORFLOW_PACKAGE}
 COPY setup.rocm.sh /setup.rocm.sh
