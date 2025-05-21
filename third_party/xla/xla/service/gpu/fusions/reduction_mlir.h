@@ -198,6 +198,8 @@ class MlirColumnReductionFusion : public MlirReductionFusion {
   IndexingMap GetSharedMemoryReductionReadMap(
       mlir::MLIRContext* ctx) const override;
   IndexingMap GetSharedMemoryWriteMap(mlir::MLIRContext* ctx) const override;
+
+  const int64_t kTileSize = 32;
 };
 
 // Special emitter for column reductions whose minor reduced dimension divides
@@ -216,6 +218,8 @@ class MlirSmallColumnReductionFusion : public MlirReductionFusion {
   IndexingMap GetSharedMemoryReductionReadMap(
       mlir::MLIRContext* ctx) const override;
   IndexingMap GetSharedMemoryWriteMap(mlir::MLIRContext* ctx) const override;
+
+  const int64_t kTileSize = 32;
 
   int64_t shared_rows_;
   int64_t loop_size_;
