@@ -53,12 +53,12 @@ using ::mlir::Value;
 using mlir::ValueRange;
 
 absl::Status CreateTritonPipeline(
-    mlir::OpPassManager& pm, const se::GpuComputeCapability& cc,
+    mlir::OpPassManager& pm, const se::DeviceDescription& device_info,
     const BlockLevelParameters& block_level_parameters,
     mt::nvidia_gpu::ClusterInfo& out_cluster_info) {
   // TODO(ROCm): Check why some test fail when threadsPerWarp is set to 64.
-  const int threadsPerWarp = 32;
-  auto ccRocm = std::get<se::RocmComputeCapability>(cc);
+  const int threadsPerWarp = device_info.threads_per_warp();
+  auto ccRocm = device_info.rocm_compute_capability();
 
   // Based on make_ttir() in
   // @triton//:third_party/amd/backend/compiler.py
