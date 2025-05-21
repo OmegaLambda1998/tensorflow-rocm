@@ -73,6 +73,7 @@ using mlir::func::FuncOp;
 using mlir::func::ReturnOp;
 using mlir_converter::ApplyIndexing;
 
+constexpr int kTileSize = 32;
 constexpr int kNumRows = 4;
 constexpr int kNumThreadsPerBlock = 128;
 constexpr int kMaxVectorizedBytes = 4;
@@ -85,7 +86,7 @@ MlirTransposeFusion::MlirTransposeFusion(const HloFusionAnalysis& analysis)
       permutation_(transpose_.permutation),
       input_shape_(
           Permute(transpose_.dimensions, InversePermutation(permutation_))),
-      base_block_size_(WarpSize(analysis_.device_info())) {
+      base_block_size_(kTileSize) {
   ConstHloInstructionSet transposes_to_tile;
   int index = 0;
   int64_t shmem_usage = 0;
