@@ -30,30 +30,17 @@ class TreeReductionRewriterTest : public HloTestBase {
  public:
   void CheckTreeRewriter(absl::string_view hlo,
                          std::optional<absl::string_view> expected) {
-<<<<<<< HEAD
 #if GOOGLE_CUDA                          
-    RunAndFilecheckHloRewrite(
-        hlo,
-#if TENSORFLOW_USE_ROCM
-        gpu::TreeReductionRewriter{se::RocmComputeCapability {
-          "908"
-        }},
-#else
-        gpu::TreeReductionRewriter{se::CudaComputeCapability{8, 1}},
-#endif
-        expected);
-#elif TENSORFLOW_USE_ROCM
-    RunAndFilecheckHloRewrite(
-        hlo, gpu::GpuTreeReductionRewriter{se::RocmComputeCapability{"908"}},
-        expected);   
-#endif        
-=======
     stream_executor::DeviceDescription device_description{
         stream_executor::GpuDeviceInfoProto{}};
     device_description.set_threads_per_warp(32);
     RunAndFilecheckHloRewrite(
         hlo, gpu::TreeReductionRewriter{device_description}, expected);
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
+#elif TENSORFLOW_USE_ROCM
+    RunAndFilecheckHloRewrite(
+        hlo, gpu::GpuTreeReductionRewriter{se::RocmComputeCapability{"908"}},
+        expected);   
+#endif        
   }
 };
 

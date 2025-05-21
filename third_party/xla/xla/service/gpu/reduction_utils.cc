@@ -33,11 +33,8 @@ limitations under the License.
 #include "xla/service/hlo_module_config.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
-<<<<<<< HEAD
 #include "xla/stream_executor/semantic_version.h"
-=======
 #include "xla/stream_executor/device_description.h"
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 #include "xla/util.h"
 #include "tsl/platform/logging.h"
 
@@ -145,13 +142,9 @@ Vector3 GetReductionTiling(const ReductionDimensions& reduction_dimensions) {
 }
 
 int64_t ReductionDimensionRaceFreeBound(
-<<<<<<< HEAD
     const HloModuleConfig& hlo_module_config,
-    const ReductionDimensions& reduction_dimensions) {
-=======
     const ReductionDimensions& reduction_dimensions,
     const se::DeviceDescription& device_description) {
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
   Vector3 reduction_tiling = GetReductionTiling(reduction_dimensions);
   if (reduction_dimensions.is_row_reduction) {
     return MinThreadsXRowReduction(hlo_module_config) * reduction_tiling[2];
@@ -218,34 +211,23 @@ bool IsReductionFromOrToContiguousDimensions(
              device_description);
 }
 
-<<<<<<< HEAD
 bool ReductionIsRaceFree(const HloModuleConfig& hlo_module_config,
-                         const ReductionDimensions& reduction_dimensions) {
-  if (reduction_dimensions.is_row_reduction) {
-    return reduction_dimensions.dimensions[2] <=
-               ReductionDimensionRaceFreeBound(hlo_module_config,
-                                               reduction_dimensions) &&
-=======
-bool ReductionIsRaceFree(const ReductionDimensions& reduction_dimensions,
+                         const ReductionDimensions& reduction_dimensions,
                          const se::DeviceDescription& device_description) {
   if (reduction_dimensions.is_row_reduction) {
     return reduction_dimensions.dimensions[2] <=
-               ReductionDimensionRaceFreeBound(reduction_dimensions,
+               ReductionDimensionRaceFreeBound(hlo_module_config,
+                                               reduction_dimensions,
                                                device_description) &&
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
            reduction_dimensions.dimensions[0] <=
                BatchedReductionRaceFreeBound();
   }
 
   // Column reduction.
   return reduction_dimensions.dimensions[1] <=
-<<<<<<< HEAD
          ReductionDimensionRaceFreeBound(hlo_module_config,
-                                         reduction_dimensions);
-=======
-         ReductionDimensionRaceFreeBound(reduction_dimensions,
+                                         reduction_dimensions,
                                          device_description);
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 }
 
 std::ostream& operator<<(std::ostream& os,
@@ -309,13 +291,9 @@ bool IsRealReductionHero(const HloInstruction& root, const HloInstruction& hero,
     return false;
   }
   return &root == &hero ||
-<<<<<<< HEAD
          ReductionIsRaceFree(hero.GetModule()->config(),
-                             GetReductionKindAndContiguousComponents(hero));
-=======
-         ReductionIsRaceFree(GetReductionKindAndContiguousComponents(hero),
+                             GetReductionKindAndContiguousComponents(hero),
                              device_description);
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 }
 
 bool AreReductionsMultiOutputFusionCompatible(

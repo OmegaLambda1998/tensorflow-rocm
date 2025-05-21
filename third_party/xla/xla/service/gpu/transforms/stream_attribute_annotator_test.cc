@@ -26,11 +26,8 @@ limitations under the License.
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/service/gpu/backend_configs.pb.h"
-<<<<<<< HEAD
 #include "xla/tests/filecheck.h"
-=======
 #include "xla/stream_executor/device_description.h"
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 #include "xla/tests/hlo_test_base.h"
 #include "tsl/platform/statusor.h"
 

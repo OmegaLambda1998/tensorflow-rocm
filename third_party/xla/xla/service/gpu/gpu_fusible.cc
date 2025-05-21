@@ -101,13 +101,14 @@ bool IfFusedReadsElementsMultipleTimes(const HloInstruction& instr) {
   return false;
 }
 
-bool IsExpensiveToRepeat(const HloInstruction& instr) {
+bool IsExpensiveToRepeat(const HloInstruction& instr,
+                         const se::DeviceDescription& device_info) {
   CHECK_NE(instr.opcode(), HloOpcode::kFusion) << "`instr` has to be unfused.";
   // Reductions which use many input elements to calculate one output element
   // are both memory and computationally heavy.
   constexpr int kMaxInputsPerOutput = 10;
   if (instr.opcode() == HloOpcode::kReduce &&
-      !IsReductionFromOrToContiguousDimensions(instr)) {
+      !IsReductionFromOrToContiguousDimensions(instr, device_info)) {
     int64_t reduction_ratio = ShapeUtil::ElementsIn(instr.operand(0)->shape()) /
                               ShapeUtil::ElementsIn(instr.shape());
     if (reduction_ratio > kMaxInputsPerOutput) return true;
@@ -422,6 +423,32 @@ bool IsUniversallyLoopFusible(const HloInstruction& instr) {
   }
 }
 
+// Returns true if `instr` can be fused as a consumer into a kLoop fusion.
+bool IsLoopFusibleAsConsumer(const HloInstruction& instr,
+                             const se::DeviceDescription& device_info) {
+  // Instr should be fusible.
+  if (!instr.IsFusible()) return false;
+
+  // An optimization for instruction fusion. Bitcast as a consumer means that it
+  // will be a root of a fusion. This just adds indexing overhead without any
+  // benefit.
+  if (instr.opcode() == HloOpcode::kBitcast) return false;
+
+  // Any reduction can be fused as a consumer.
+  if (instr.opcode() == HloOpcode::kReduce) return true;
+
+  // We may have input fusions which effectively have turned into loop
+  // fusions. Those should still be considered as loop fusible consumers,
+  // but they are not universally loop fusible.
+  if (!IsInputFusible(instr, device_info) &&
+      instr.opcode() == HloOpcode::kFusion &&
+      instr.fusion_kind() == HloInstruction::FusionKind::kInput) {
+    return true;
+  }
+
+  return IsUniversallyLoopFusible(instr);
+}
+
 // Returns true if `instr` can be fused as a producer into a kLoop fusion.
 bool IsLoopFusibleAsProducer(const HloInstruction& instr) {
   // Instr should be fusible.
@@ -480,15 +507,15 @@ FusionDecision CanEmitInputFusedScatter(const HloInstruction& producer,
   return FusionDecision::Allow();
 }
 
-<<<<<<< HEAD
-FusionDecision IsProducerConsumerFusible(const HloInstruction& producer,
-                                         const HloInstruction& consumer) {
+FusionDecision IsProducerConsumerFusible(
+    const HloInstruction& producer, const HloInstruction& consumer,
+    const se::DeviceDescription& device_info) {
   if (!IsLoopFusibleAsProducer(producer) &&
       !IsInputFusibleTranspose(producer)) {
     return FusionDecision::Forbid("the producer is not loop-fusible");
   }
 
-  if (IsInputFusibleReduction(producer)) {
+  if (IsInputFusibleReduction(producer, device_info)) {
     if (!producer.GetModule()
              ->config()
              .debug_options()
@@ -502,7 +529,8 @@ FusionDecision IsProducerConsumerFusible(const HloInstruction& producer,
             : producer;
     if (!ReductionIsRaceFree(
             reduce_hero.GetModule()->config(),
-            GetReductionKindAndContiguousComponents(reduce_hero))) {
+            GetReductionKindAndContiguousComponents(reduce_hero),
+            device_info)) {
       return FusionDecision::Forbid(
           "Reduction output fusion only works for race free reductions");
     }
@@ -523,7 +551,8 @@ FusionDecision IsProducerConsumerFusible(const HloInstruction& producer,
     return can_fuse;
   }
 
-  if (!IsInputFusible(consumer) && !IsLoopFusibleAsConsumer(consumer)) {
+  if (!IsInputFusible(consumer, device_info) &&
+      !IsLoopFusibleAsConsumer(consumer, device_info)) {
     return FusionDecision::Forbid(
         "the consumer is not input-fusible and not loop-fusible");
   }
@@ -552,11 +581,8 @@ FusionDecision IsProducerConsumerFusible(const HloInstruction& producer,
   return InstructionFusion::ShouldFuseInPlaceOp(&producer, &consumer);
 }
 
-FusionDecision IsProducerMultiOutputFusible(const HloInstruction& producer) {
-=======
 FusionDecision IsProducerMultiOutputFusible(
     const HloInstruction& producer, const se::DeviceDescription& device_info) {
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
   // Skip multiple output fusion. It's not yet supported.
   if (producer.IsMultiOutputFusion()) {
     return FusionDecision::Forbid("Producer is a multi-output fusion");
@@ -798,9 +824,10 @@ FusionDecision FusionFitsInBudget(const HloInstruction& instr1,
       MaxOperandsAndOutputsPerFusion()) {
     return FusionDecision::Allow();
   } else {
-    VLOG(5) << "Operand count of " << "(" << instr1.ToString()
-            << " ) = " << instr1.operand_count() << " and ( "
-            << instr2.ToString() << " ) = " << instr2.operand_count()
+    VLOG(5) << "Operand count of "
+            << "(" << instr1.ToString() << " ) = " << instr1.operand_count()
+            << " and ( " << instr2.ToString()
+            << " ) = " << instr2.operand_count()
             << " and num_output_buffers = " << num_output_buffers
             << " is bigger than the bound of "
             << MaxOperandsAndOutputsPerFusion();
@@ -833,17 +860,17 @@ FusionDecision FusionFitsInBudget(const HloInstruction& instr1,
   return FusionDecision::Allow();
 }
 
-<<<<<<< HEAD
 bool CreatesHeavyComputation(const HloInstruction& producer,
-                             const HloInstruction& consumer) {
+                             const HloInstruction& consumer,
+                             const se::DeviceDescription& device_info) {
   // If producer's computation is not expensive to repeat even in the consumer
   // requests the same element multiple times there is nothing to do.
   auto producer_is_heavy = [&](const HloInstruction& instr) {
     if (producer.opcode() != HloOpcode::kFusion) {
-      return IsExpensiveToRepeat(producer);
+      return IsExpensiveToRepeat(producer, device_info);
     }
     for (const auto& instr : producer.fused_instructions()) {
-      if (IsExpensiveToRepeat(*instr)) {
+      if (IsExpensiveToRepeat(*instr, device_info)) {
         return true;
       }
     }
@@ -898,24 +925,16 @@ bool CreatesHeavyComputation(const HloInstruction& producer,
   return false;
 }
 
-bool IsFusibleAsMultiOutputFusionRoot(const HloInstruction& instr) {
-=======
 bool IsFusibleAsMultiOutputFusionRoot(
     const HloInstruction& instr, const se::DeviceDescription& device_info) {
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
   // We can fuse reduces and loop fusions. Elementwise instructions can be fused
   // with any other instruction.
   // Note that scatter cannot be the root of a multi-output fusion because
   // its emitter doesn't support it.
 
-<<<<<<< HEAD
   return instr.IsFusible() &&
-         (IsInputFusibleReduction(instr) || IsInputFusibleTranspose(instr) ||
-=======
-  return instr.IsFusible() && !instr.IsCustomFusion() &&
          (IsInputFusibleReduction(instr, device_info) ||
           IsInputFusibleTranspose(instr) ||
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
           instr.IsLoopFusion() ||  // TODO(b/130013493): Use IsLoopFusible here.
           instr.IsElementwise());
 }

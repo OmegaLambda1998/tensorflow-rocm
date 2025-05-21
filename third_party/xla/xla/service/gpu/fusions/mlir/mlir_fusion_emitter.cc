@@ -539,16 +539,10 @@ void AddXlaGpuOpsOptimizationPasses(mlir::OpPassManager& pm) {
   pm.addPass(mlir::createCSEPass());
 }
 
-<<<<<<< HEAD
-void AddLoopTransformationPasses(mlir::OpPassManager& pm) {
-  pm.addNestedPass<FuncOp>(CreateLowerXlaGpuToScfPass());
-=======
 void AddLoopTransformationPasses(mlir::OpPassManager& pm,
                                  const se::DeviceDescription& device) {
   pm.addNestedPass<FuncOp>(
       CreateLowerXlaGpuToScfPass(device.threads_per_warp()));
-  pm.addNestedPass<FuncOp>(CreateFuseLoopsPass());
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
   pm.addPass(mlir::createInlinerPass({}, [&](mlir::OpPassManager& pm) {
     // CSE after inlining because inlining can introduce duplicates.
     pm.addPass(mlir::createCSEPass());

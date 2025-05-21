@@ -58,7 +58,7 @@ absl::Status EmitGeneric(mlir::OpBuilder b, absl::string_view libdevice_path,
 
 absl::StatusOr<LaunchDimensions> GetMatMulLaunchDimensions(
     const TritonFusionAnalysis& analysis, const HloFusionAdaptor& fusion,
-    const TritonGemmConfig& config) {
+    const TritonGemmConfig& config, const se::DeviceDescription& device_info) {
   return absl::UnimplementedError("not supported for this build configuration");
 }
 

@@ -2726,11 +2726,8 @@ xla_cc_test(
         ":stream_attribute_annotator",
         "//xla/hlo/ir:hlo",
         "//xla/service/gpu:backend_configs_cc",
-<<<<<<< HEAD
         "//xla/tests:filecheck",
-=======
         "//xla/stream_executor:device_description",
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
         "//xla/tests:hlo_test_base",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/strings:string_view",

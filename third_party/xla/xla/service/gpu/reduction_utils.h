@@ -21,11 +21,8 @@ limitations under the License.
 
 #include "absl/container/inlined_vector.h"
 #include "xla/hlo/ir/hlo_instruction.h"
-<<<<<<< HEAD
 #include "xla/service/hlo_module_config.h"
-=======
 #include "xla/stream_executor/device_description.h"
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 #include "xla/util.h"
 
 namespace xla {
@@ -106,23 +103,15 @@ Vector3 GetReductionTiling(const ReductionDimensions& reduction_dimensions);
 
 // How big the reduction dimension can be to be race free.
 int64_t ReductionDimensionRaceFreeBound(
-<<<<<<< HEAD
     const HloModuleConfig& hlo_module_config,
-    const ReductionDimensions& reduction_dimensions);
-
-// Returns whether the given reduction can be safely generated without atomics :
-// that is, at most one block will write to every output element.
-bool ReductionIsRaceFree(const HloModuleConfig& hlo_module_config,
-                         const ReductionDimensions& reduction_dimensions);
-=======
     const ReductionDimensions& reduction_dimensions,
     const se::DeviceDescription& device_description);
 
 // Returns whether the given reduction can be safely generated without atomics :
 // that is, at most one block will write to every output element.
-bool ReductionIsRaceFree(const ReductionDimensions& reduction_dimensions,
+bool ReductionIsRaceFree(const HloModuleConfig& hlo_module_config,
+                         const ReductionDimensions& reduction_dimensions,
                          const se::DeviceDescription& device_description);
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 
 // Whether the instruction is a reduction hero for the given root.
 bool IsRealReductionHero(const HloInstruction& root, const HloInstruction& hero,

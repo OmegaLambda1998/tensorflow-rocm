@@ -54,7 +54,7 @@ std::unique_ptr<mlir::Pass> CreateMergePointersToSameSlicePass();
 std::unique_ptr<mlir::Pass> CreateOptimizeLoopsPass();
 std::unique_ptr<mlir::Pass> CreatePeelLoopsPass();
 std::unique_ptr<mlir::Pass> CreatePropagateSliceIndicesPass();
-std::unique_ptr<mlir::Pass> CreateRewriteReductionsPass();
+std::unique_ptr<mlir::Pass> CreateRewriteReductionsPass(int64_t warp_size = 32);
 std::unique_ptr<mlir::Pass> CreateSimplifyAffinePass();
 std::unique_ptr<mlir::Pass> CreateSimplifyArithPass();
 std::unique_ptr<mlir::Pass> CreateUnswitchLoopsPass();

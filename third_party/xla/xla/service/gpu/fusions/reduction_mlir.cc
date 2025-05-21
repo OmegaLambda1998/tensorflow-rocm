@@ -376,12 +376,8 @@ MlirReductionFusion::MlirReductionFusion(const HloFusionAnalysis& analysis)
       GetReductionKindAndContiguousComponents(*hero_reduction);
   VLOG(10) << reduction_dimensions_;
 
-<<<<<<< HEAD
   CHECK(ReductionIsRaceFree(hero_reduction->GetModule()->config(),
-                            reduction_dimensions_))
-=======
-  CHECK(ReductionIsRaceFree(reduction_dimensions_, analysis.device_info()))
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
+                            reduction_dimensions_, analysis.device_info()))
       << "Non-race-free reductions should have been decomposed. Did "
          "tree_reduction_rewriter run?";
 
@@ -792,15 +788,16 @@ std::unique_ptr<MlirReductionFusion> CreateMlirReductionFusion(
   CHECK_NE(hero_reduction, nullptr);
   ReductionDimensions reduction_dimensions =
       GetReductionKindAndContiguousComponents(*hero_reduction);
+  const int64_t warp_size = analysis.device_info().threads_per_warp();
   if (reduction_dimensions.is_row_reduction) {
     if (RowReductionGetRowsPerWarp(
-            reduction_dimensions.dimensions[kRowMinorReduced]) > 1) {
+            reduction_dimensions.dimensions[kRowMinorReduced], warp_size) > 1) {
       return std::make_unique<MlirMultiRowReductionFusion>(analysis);
     }
     return std::make_unique<MlirRowReductionFusion>(analysis);
   }
 
-  if (WarpSize() % reduction_dimensions.dimensions[kColMinorKept] == 0) {
+  if (warp_size % reduction_dimensions.dimensions[kColMinorKept] == 0) {
     return std::make_unique<MlirSmallColumnReductionFusion>(analysis);
   }
   return std::make_unique<MlirColumnReductionFusion>(analysis);
@@ -811,7 +808,7 @@ MlirRowReductionFusion::MlirRowReductionFusion(
     : MlirReductionFusion(analysis) {
   CHECK(reduction_dimensions_.is_row_reduction);
   Vector3 shape = reduction_dimensions_.dimensions;
-  CHECK_EQ(RowReductionGetRowsPerWarp(shape[kRowMinorReduced]), 1);
+  CHECK_EQ(RowReductionGetRowsPerWarp(shape[kRowMinorReduced], WarpSize()), 1);
   constexpr int64_t kMinorReducedElementsPerThread = 16;
 
   int64_t num_threads_kept = 1;
@@ -951,7 +948,8 @@ MlirMultiRowReductionFusion::MlirMultiRowReductionFusion(
     : MlirReductionFusion(analysis) {
   CHECK(reduction_dimensions_.is_row_reduction);
   Vector3 shape = reduction_dimensions_.dimensions;
-  int64_t rows_per_warp = RowReductionGetRowsPerWarp(shape[kRowMinorReduced]);
+  int64_t rows_per_warp =
+      RowReductionGetRowsPerWarp(shape[kRowMinorReduced], WarpSize());
   input_shape_ = {shape[0], shape[1], shape[2]};
   CHECK_GT(rows_per_warp, 1);
 
@@ -999,61 +997,6 @@ MlirMultiRowReductionFusion::MlirMultiRowReductionFusion(
       vector_size > 1) {
     compute_block_size(vector_size);
   }
-<<<<<<< HEAD
-=======
-
-  // The reduced dimension must fit into a single warp.
-  const int64_t warp_size = analysis.device_info().threads_per_warp();
-  if (shape[kRowMinorReduced] > warp_size * vector_size) {
-    return nullptr;
-  }
-
-  // At the very least, we want to have work for every SM.
-  // TODO(jreiffers): This limit is probably too low: if we have as many blocks
-  // as SMs, we'll only run about 8 warps per SM, so occupancy will be very low.
-  // Further measurements are needed to refine this heuristic.
-  int64_t min_desired_blocks = analysis.device_info().core_count();
-  while (vector_size > 1 &&
-         GetNumBlocks(reduction_dimensions,
-                      GetNumThreads(reduction_dimensions, vector_size)) <
-             min_desired_blocks) {
-    vector_size /= 2;
-  }
-
-  // Check again that the reduced dimension fits after potentially reducing the
-  // vector size.
-  if (shape[kRowMinorReduced] > warp_size * vector_size) {
-    return nullptr;
-  }
-
-  return std::make_unique<MlirMultiRowReductionFusion>(analysis, vector_size);
-}
-
-absl::InlinedVector<int64_t, 4> MlirMultiRowReductionFusion::GetNumThreads(
-    const ReductionDimensions& reduction_dimensions, int vector_size) {
-  int64_t num_threads_reduced =
-      reduction_dimensions.dimensions[kRowMinorReduced] / vector_size;
-
-  constexpr int64_t kThreadsPerBlockTarget = 256;
-  int64_t kept_size = reduction_dimensions.dimensions[kRowKept];
-  int64_t num_threads_kept = 1;
-  if (kept_size * num_threads_reduced <= kThreadsPerBlockTarget) {
-    num_threads_kept = kept_size;
-  } else {
-    num_threads_kept = kThreadsPerBlockTarget / num_threads_reduced;
-  }
-  return {num_threads_kept, num_threads_reduced};
-}
-
-int64_t MlirMultiRowReductionFusion::GetNumBlocks(
-    const ReductionDimensions& reduction_dimensions,
-    const absl::InlinedVector<int64_t, 4>& num_threads) {
-  CHECK_EQ(num_threads.size(), 2)
-      << "Expected num_threads to contain the number of threads in the {kept, "
-         "reduced} dimensions.";
-  return CeilOfRatio(reduction_dimensions.dimensions[kRowKept],
-                     num_threads.front());
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 }
 
 IndexingMap MlirMultiRowReductionFusion::ComputeReductionInputIndexing(
@@ -1094,7 +1037,8 @@ IndexingMap MlirMultiRowReductionFusion::ComputeReductionOutputIndexing(
 
 int MlirMultiRowReductionFusion::GetRowsPerWarp() const {
   return RowReductionGetRowsPerWarp(
-             input_shape_[ReductionDimensions::kRowMinorReducedDimension]) *
+             input_shape_[ReductionDimensions::kRowMinorReducedDimension],
+             WarpSize()) *
          tile_sizes_per_thread_[1];
 }
 
@@ -1110,29 +1054,5 @@ llvm::SmallVector<mlir::Value> MlirMultiRowReductionFusion::EmitReduction(
                           group_id, /*symbol_values=*/{});
 }
 
-<<<<<<< HEAD
-=======
-std::unique_ptr<MlirReductionFusion> CreateMlirReductionFusion(
-    const HloFusionAnalysis& analysis) {
-  auto* hero_reduction = analysis.FindHeroReduction();
-  CHECK_NE(hero_reduction, nullptr);
-  ReductionDimensions reduction_dimensions =
-      GetReductionKindAndContiguousComponents(*hero_reduction);
-  if (reduction_dimensions.is_row_reduction) {
-    auto multi_row_emitter = MlirMultiRowReductionFusion::TryCreate(analysis);
-    if (multi_row_emitter != nullptr) {
-      return multi_row_emitter;
-    }
-    return std::make_unique<MlirRowReductionFusion>(analysis);
-  }
-
-  const int64_t warp_size = analysis.device_info().threads_per_warp();
-  if (warp_size % reduction_dimensions.dimensions[kColMinorKept] == 0) {
-    return std::make_unique<MlirSmallColumnReductionFusion>(analysis);
-  }
-  return std::make_unique<MlirColumnReductionFusion>(analysis);
-}
-
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 }  // namespace gpu
 }  // namespace xla

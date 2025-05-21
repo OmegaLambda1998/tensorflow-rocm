@@ -45,7 +45,8 @@ bool IfFusedReadsElementsMultipleTimes(const HloInstruction& instr);
 
 // Check if the operation is memory or computationally expensive
 // to repeat.
-bool IsExpensiveToRepeat(const HloInstruction& instr);
+bool IsExpensiveToRepeat(const HloInstruction& instr,
+                         const se::DeviceDescription& device_info);
 
 // Fusion passes frequently do checks across all pairs of "interesting" nodes.
 // Computing e.g. FusionFitsInBudget(a, b) requires computing expensive
@@ -127,13 +128,6 @@ bool IsInputFusibleReduction(const HloInstruction& instr,
 bool IsNestableVariadicReduction(const HloInstruction& instr,
                                  const se::DeviceDescription& device_info);
 
-<<<<<<< HEAD
-=======
-// Whether `instr` is a nestable variadic reduce-window
-// or a loop fusion rooted with such.
-bool IsNestableVariadicReduceWindow(const HloInstruction& instr);
-
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 // Whether `instr` is fusible as root of a scatter input fusions, i.e. `instr`
 // is either an unfused scatter op or a scatter input fusion.
 bool IsInputFusibleScatter(const HloInstruction& instr);
@@ -153,7 +147,8 @@ FusionDecision FusionFitsInBudget(const HloInstruction& instr1,
 // producer has a complex computation per output and consumer calls this
 // computations multiple times.
 bool CreatesHeavyComputation(const HloInstruction& producer,
-                             const HloInstruction& consumer);
+                             const HloInstruction& consumer,
+                             const se::DeviceDescription& device_info);
 
 // Returns the instruction that determines the emitter used for lowering,
 // sometimes referred to as "the real hero".
@@ -187,8 +182,9 @@ FusionDecision CanEmitInputFusedScatter(const HloInstruction& producer,
 // i.e. whether the producer and consumer are loop/input fusible and
 // they are not library calls.
 // Used both by instruction fusion and fusion-fusion merging.
-FusionDecision IsProducerConsumerFusible(const HloInstruction& producer,
-                                         const HloInstruction& consumer);
+FusionDecision IsProducerConsumerFusible(
+    const HloInstruction& producer, const HloInstruction& consumer,
+    const se::DeviceDescription& device_info);
 
 // Whether the producer is a valid candidate for a multi-output fusion.
 // That is, the root tuple of the multi-output fusion will contain the results

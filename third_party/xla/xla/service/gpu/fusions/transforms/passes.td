@@ -256,6 +256,9 @@ def RewriteReductionsPass : Pass<
     "xla::gpu::XlaGpuDialect",
   ];
 
+  let options = [
+    Option<"warp_size", "warp_size", "int64_t", /*default=*/"32", "Warp size.">,
+  ];
   let constructor = "CreateRewriteReductionsPass()";
 }
 

@@ -72,35 +72,7 @@ absl::StatusOr<const HloFusionInstruction*> AsTritonFusion(
 
 std::unique_ptr<HloModule> NewHloModuleFromFusion(
     const HloFusionInstruction& fusion, const DebugOptions& debug_opts,
-<<<<<<< HEAD
     bool clear_backend_config) {
-=======
-    const se::DeviceDescription& gpu_device_info) {
-  std::unique_ptr<HloModule> new_module =
-      ExtractComputationIntoNewModule(*fusion.fused_instructions_computation());
-  new_module->mutable_config().set_debug_options(debug_opts);
-  new_module->mutable_config()
-      .mutable_debug_options()
-      .clear_xla_gpu_experimental_enable_triton_softmax_priority_fusion();
-
-  TreeReductionRewriter tree_reduction_rewriter(gpu_device_info);
-  TF_RETURN_IF_ERROR(tree_reduction_rewriter.Run(new_module.get()).status());
-
-  PriorityFusion fusion_pass(
-      /*thread_pool=*/nullptr, gpu_device_info, HloCostAnalysis::Options{});
-  TF_RETURN_IF_ERROR(fusion_pass.Run(new_module.get()).status());
-
-  // If the priority fusion pass above skipped some instructions, turn them
-  // into fusions.
-  FusionWrapper fusion_wrapper(gpu_device_info);
-  TF_RETURN_IF_ERROR(fusion_wrapper.Run(new_module.get()).status());
-
-  return new_module;
-}
-
-std::unique_ptr<HloModule> NewHloModuleWithTritonFromFusion(
-    const HloFusionInstruction& fusion, const DebugOptions& debug_opts) {
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
   std::unique_ptr<HloModule> new_module =
       ExtractInstructionIntoNewModule(fusion);
   if (clear_backend_config) {
@@ -118,23 +90,12 @@ namespace triton_fusion_numerics_pass_internal {
 absl::StatusOr<ScopedShapedBuffer> CompileAndRunFusion(
     AutotunerCompileUtil& util, const HloFusionInstruction& fusion,
     const AutotuneConfig& config, const DebugOptions& debug_opts,
-<<<<<<< HEAD
     bool clear_backend_config) {
   TF_ASSIGN_OR_RETURN(std::unique_ptr<Executable> executable,
                       util.Compile([&](const DebugOptions& opts) {
                         return NewHloModuleFromFusion(fusion, opts,
                                                       clear_backend_config);
                       }));
-=======
-    bool disable_triton) {
-  TF_ASSIGN_OR_RETURN(
-      std::unique_ptr<Executable> executable,
-      util.Compile([&](const DebugOptions& opts) {
-        return disable_triton ? NewHloModuleWithoutTritonFromFusion(
-                                    fusion, opts, config.GetDeviceDescription())
-                              : NewHloModuleWithTritonFromFusion(fusion, opts);
-      }));
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
   if (executable == nullptr) {
     return Internal("Failed to compile Triton fusion.");
   }

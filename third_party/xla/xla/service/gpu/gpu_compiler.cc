@@ -1542,24 +1542,15 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
     }
 
     pipeline.AddPass<ReductionDimensionGrouper>();
-<<<<<<< HEAD
     // Do not split small reduction dimensions unless priority fusion is
     // enabled, which handles such cases well.
     bool ignore_small_reduce_dims =
         !debug_options.xla_gpu_enable_priority_fusion();
-    pipeline.AddPass<HloPassFix<ReductionSplitter>>(ignore_small_reduce_dims);
-    pipeline.AddPass<HloPassFix<TreeReductionRewriter>>(gpu_version);
-=======
     pipeline.AddPass<HloPassFix<ReductionSplitter>>(
         gpu_target_config.device_description,
-        /*ignore_small_reduce_dims=*/false);
+        ignore_small_reduce_dims);
     pipeline.AddPass<HloPassFix<TreeReductionRewriter>>(
         gpu_target_config.device_description);
-    // Normalization passes might have introduced s4 tensors without bit width
-    // annotations, this pass will add the annotations.
-    pipeline.AddPass<SubByteNormalization>(
-        SubByteNormalization::SET_ELEMENT_SIZE);
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
     TF_RETURN_IF_ERROR(pipeline.Run(hlo_module).status());
   }
 

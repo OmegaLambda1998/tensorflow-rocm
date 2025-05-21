@@ -148,29 +148,15 @@ class HorizontalLoopFusionImpl {
   std::string prefix_;
 };  // HorizontalLoopFusionImpl
 
-<<<<<<< HEAD
-bool IsFusibleCandidate(const HloInstruction& instr) {
-=======
-bool IsConcatenationInputFusion(const HloInstruction& instr) {
-  return instr.IsInputFusion() &&
-         instr.fused_expression_root()->opcode() == HloOpcode::kConcatenate;
-}
-
 bool IsFusibleCandidate(const HloInstruction& instr,
                         const se::DeviceDescription& device_description) {
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
   // For now, we do not support fusing instruction with control flow.
   if (!instr.control_successors().empty() ||
       !instr.control_predecessors().empty()) {
     return false;
   }
 
-<<<<<<< HEAD
-  if (IsNestableVariadicReduction(instr)) {
-=======
-  if (IsNestableVariadicReduction(instr, device_description) ||
-      IsNestableVariadicReduceWindow(instr)) {
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
+  if (IsNestableVariadicReduction(instr, device_description)) {
     return false;
   }
 
@@ -288,27 +274,16 @@ bool AnyOpndIsParamSharedAmongFusions(
 }
 
 void HorizontalLoopFusionImpl::FusionCandidates::Initialize(
-<<<<<<< HEAD
-    HloInstruction* consumer) {
-=======
     HloInstruction* consumer, const se::DeviceDescription& device_description) {
-  VLOG(4) << "Considering fusing inputs of " << consumer->ToShortString();
-
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
   // First, find out all potential target candidates. We will filter out
   // unsupported/non-profitable cases below.
   absl::flat_hash_set<HloInstruction*> fusible_candidates;
   std::vector<HloInstruction*> ordered_fusible_candidates;
   for (HloInstruction* opnd : consumer->operands()) {
-<<<<<<< HEAD
     HloInstruction* predecessor = opnd->LatestNonGteAncestor();
     // We support kLoop fusion and element-wise HLOs now. We may extend the
     // support list if needs arise.
-    if (IsFusibleCandidate(*predecessor)) {
-=======
-    HloInstruction* predecessor = LatestNonTrivialAncestor(opnd);
     if (IsFusibleCandidate(*predecessor, device_description)) {
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
       if (fusible_candidates.insert(predecessor).second) {
         // Add unseen fusion to ordered list.
         ordered_fusible_candidates.push_back(predecessor);

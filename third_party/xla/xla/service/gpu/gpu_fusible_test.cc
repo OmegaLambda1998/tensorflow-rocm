@@ -21,17 +21,12 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_opcode.h"
-<<<<<<< HEAD
 #include "xla/service/hlo_parser.h"
-#include "xla/tests/hlo_test_base.h"
-=======
-#include "xla/hlo/parser/hlo_parser.h"
 #include "xla/service/hlo_runner.h"
 #include "xla/service/instruction_fusion.h"
 #include "xla/service/platform_util.h"
 #include "xla/stream_executor/device_description.h"
-#include "xla/tests/new_hlo_test_base.h"
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
+#include "xla/tests/hlo_test_base.h"
 #include "tsl/platform/statusor.h"
 
 namespace xla {
@@ -47,14 +42,9 @@ auto MakeDeviceDescription() {
   return device_description;
 }
 
-class GpuFusibleTest : public NewHloTestBase {
+class GpuFusibleTest : public HloTestBase {
  public:
-  GpuFusibleTest()
-      : NewHloTestBase(std::make_unique<HloRunner>(
-                           PlatformUtil::GetDefaultPlatform().value()),
-                       std::make_unique<HloRunner>(
-                           PlatformUtil::GetDefaultPlatform().value())),
-        device_description_(MakeDeviceDescription()) {}
+  GpuFusibleTest() : device_description_(MakeDeviceDescription()) {}
 
   bool IsReduceInputFusion(const HloInstruction& instr) const {
     return ::xla::gpu::IsReduceInputFusion(instr, device_description_);
@@ -62,6 +52,12 @@ class GpuFusibleTest : public NewHloTestBase {
 
   bool IsInputFusibleReduction(const HloInstruction& instr) const {
     return ::xla::gpu::IsInputFusibleReduction(instr, device_description_);
+  }
+
+  FusionDecision IsProducerConsumerFusible(
+      const HloInstruction& producer, const HloInstruction& consumer) const {
+    return ::xla::gpu::IsProducerConsumerFusible(producer, consumer,
+                                                 device_description_);
   }
 
   FusionDecision IsProducerMultiOutputFusible(
@@ -1445,7 +1441,8 @@ TEST_F(GpuFusibleTest, CreatesHeavyComputation_NonfusionInstr) {
   const HloInstruction* root = module->entry_computation()->root_instruction();
   const HloInstruction* producer = root->operand(0);
   const HloInstruction* consumer = root->operand(1);
-  EXPECT_TRUE(CreatesHeavyComputation(*producer, *consumer));
+  EXPECT_TRUE(
+      CreatesHeavyComputation(*producer, *consumer, device_description()));
 }
 
 TEST_F(GpuFusibleTest, DoesNotCreateHeavyComputation_NonfusionInstr) {
@@ -1466,7 +1463,8 @@ TEST_F(GpuFusibleTest, DoesNotCreateHeavyComputation_NonfusionInstr) {
   const HloInstruction* root = module->entry_computation()->root_instruction();
   const HloInstruction* producer = root->operand(0);
   const HloInstruction* consumer = root->operand(1);
-  EXPECT_FALSE(CreatesHeavyComputation(*producer, *consumer));
+  EXPECT_FALSE(
+      CreatesHeavyComputation(*producer, *consumer, device_description()));
 }
 
 TEST_F(GpuFusibleTest,
@@ -1489,7 +1487,8 @@ TEST_F(GpuFusibleTest,
   const HloInstruction* root = module->entry_computation()->root_instruction();
   const HloInstruction* producer = root->operand(0);
   const HloInstruction* consumer = root->operand(1);
-  EXPECT_FALSE(CreatesHeavyComputation(*producer, *consumer));
+  EXPECT_FALSE(
+      CreatesHeavyComputation(*producer, *consumer, device_description()));
 }
 
 TEST_F(GpuFusibleTest, CreatesHeavyComputation_ReduceWindowGather) {
@@ -1510,9 +1509,10 @@ TEST_F(GpuFusibleTest, CreatesHeavyComputation_ReduceWindowGather) {
   EXPECT_EQ(gather->opcode(), HloOpcode::kGather);
   EXPECT_EQ(reduce_window->opcode(), HloOpcode::kReduceWindow);
   EXPECT_FALSE(IfFusedReadsElementsMultipleTimes(*reduce_window));
-  EXPECT_TRUE(IsExpensiveToRepeat(*reduce_window));
+  EXPECT_TRUE(IsExpensiveToRepeat(*reduce_window, device_description()));
   EXPECT_TRUE(IfFusedReadsElementsMultipleTimes(*gather));
-  EXPECT_TRUE(CreatesHeavyComputation(*reduce_window, *gather));
+  EXPECT_TRUE(
+      CreatesHeavyComputation(*reduce_window, *gather, device_description()));
 }
 
 TEST_F(GpuFusibleTest, CreatesHeavyComputation_FusionInstr) {
@@ -1545,7 +1545,8 @@ TEST_F(GpuFusibleTest, CreatesHeavyComputation_FusionInstr) {
   const HloInstruction* root = module->entry_computation()->root_instruction();
   const HloInstruction* producer = root->operand(0);
   const HloInstruction* consumer = root->operand(1);
-  EXPECT_TRUE(CreatesHeavyComputation(*producer, *consumer));
+  EXPECT_TRUE(
+      CreatesHeavyComputation(*producer, *consumer, device_description()));
 }
 
 TEST_F(GpuFusibleTest, DoesNotCreateHeavyComputation_FusionInstr) {
@@ -1578,7 +1579,8 @@ TEST_F(GpuFusibleTest, DoesNotCreateHeavyComputation_FusionInstr) {
   const HloInstruction* root = module->entry_computation()->root_instruction();
   const HloInstruction* producer = root->operand(0);
   const HloInstruction* consumer = root->operand(1);
-  EXPECT_FALSE(CreatesHeavyComputation(*producer, *consumer));
+  EXPECT_FALSE(
+      CreatesHeavyComputation(*producer, *consumer, device_description()));
 }
 
 TEST_F(GpuFusibleTest, ChooseFusionKind) {
@@ -1835,35 +1837,13 @@ TEST_F(GpuFusibleTest, GetSharedMemoryUsage) {
       ROOT res = f32[1024,128,2]{2,1,0} fusion(p), kind=kInput, calls=wrapped_transpose
     })"))
                     .value();
-<<<<<<< HEAD
   auto& debug_options = module->mutable_config().mutable_debug_options();
   debug_options.set_xla_gpu_mlir_emitter_level(3);
-  FusionInfoCache cache;
-=======
   FusionInfoCache cache(device_description());
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
   auto fusion = module->entry_computation()->root_instruction();
   EXPECT_EQ(cache.GetSharedMemoryUsage(*fusion), 32 * 33 * 2 * 4);
 }
 
-<<<<<<< HEAD
-=======
-TEST_F(GpuFusibleTest, IsConsumerTheOnlyNonRootUser) {
-  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(R"(
-e {
-  p = s8[] parameter(0)
-  n = s8[] negate(p)
-  b = s8[1] bitcast(p)
-  t = tuple(b, n)
-})"));
-
-  const HloInstruction& p =
-      *module->entry_computation()->parameter_instruction(0);
-  const HloInstruction& n = *p.users().front();
-  EXPECT_TRUE(IsConsumerTheOnlyNonRootUser(p, n));
-}
-
 }  // namespace
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 }  // namespace gpu
 }  // namespace xla

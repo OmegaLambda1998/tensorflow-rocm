@@ -706,12 +706,9 @@ cc_library(
         "//xla:shape_util",
         "//xla:util",
         "//xla/hlo/ir:hlo",
-<<<<<<< HEAD
         "//xla/service:hlo_module_config",
         "//xla/stream_executor:semantic_version",
-=======
         "//xla/stream_executor:device_description",
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:inlined_vector",
@@ -2528,17 +2525,12 @@ xla_cc_test(
     deps = [
         ":gpu_fusible",
         "//xla/hlo/ir:hlo",
-<<<<<<< HEAD
         "//xla/service:hlo_parser",
         "//xla/tests:hlo_test_base",
-=======
-        "//xla/hlo/parser:hlo_parser",
         "//xla/service:hlo_runner",
         "//xla/service:instruction_fusion",
         "//xla/service:platform_util",
         "//xla/stream_executor:device_description",
-        "//xla/tests:new_hlo_test_base",
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
         "//xla/tests:xla_internal_test_main",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",

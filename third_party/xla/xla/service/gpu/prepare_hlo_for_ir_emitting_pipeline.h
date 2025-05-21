@@ -18,11 +18,8 @@ limitations under the License.
 
 #include "xla/hlo/ir/hlo_module.h"
 #include "xla/hlo/pass/hlo_pass_pipeline.h"
-<<<<<<< HEAD
 #include "xla/service/hlo_dataflow_analysis.h"
-=======
 #include "xla/stream_executor/device_description.h"
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 
 namespace xla {
 namespace gpu {

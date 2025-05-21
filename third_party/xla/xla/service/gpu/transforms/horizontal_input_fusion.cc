@@ -97,12 +97,7 @@ std::vector<HloInstruction*> FindAndSortFusionCandidates(
     // Find out the input fusion instructions whose only consumer is `consumer`.
     // This guarantees that fusing these candidates will never create cycles, as
     // there is no back edge.
-<<<<<<< HEAD
-    if (IsInputFusibleReduction(*predecessor) &&
-=======
-    if (!predecessor->IsCustomFusion() &&
-        IsInputFusibleReduction(*predecessor, device_info) &&
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
+    if (IsInputFusibleReduction(*predecessor, device_info) &&
         IsConsumerTheOnlyNonRootUser(*predecessor, *consumer)) {
       if (fusion_instr_set.insert(predecessor).second) {
         fusion_instrs.push_back(predecessor);
@@ -112,18 +107,11 @@ std::vector<HloInstruction*> FindAndSortFusionCandidates(
 
   std::sort(fusion_instrs.begin(), fusion_instrs.end(),
             [&](const HloInstruction* a, const HloInstruction* b) {
-<<<<<<< HEAD
-              Shape shape_a = GetInputShapeForMultiOutputFusion(*a);
-              Shape shape_b = GetInputShapeForMultiOutputFusion(*b);
-              if (!ShapeUtil::EqualIgnoringElementType(shape_a, shape_b)) {
-=======
               Shape shape_a =
                   GetInputShapeForMultiOutputFusion(*a, device_info);
               Shape shape_b =
                   GetInputShapeForMultiOutputFusion(*b, device_info);
-              auto tuple_for_op = [](const Shape& shape,
-                                     const HloInstruction* op) {
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
+              if (!ShapeUtil::EqualIgnoringElementType(shape_a, shape_b)) {
                 // Sort shapes according to dimensions, so that the same input
                 // shapes will be placed adjacent each other.
                 return CompareShapeDimsFromLeftToRight(shape_a, shape_b);

@@ -143,25 +143,6 @@ TEST_F(FusionWrapperTest, ControlDependency) {
 // CHECK-SAME: control-predecessors={%fusion})");
 }
 
-<<<<<<< HEAD
-=======
-TEST_F(FusionWrapperTest, Copy) {
-  // Avoid rewriting copies, so that the rematerialization pass
-  // can avoid rematerializing copies inserted by copy-insertion
-  // (the rematerialization could read overwritten data).
-  RunAndFilecheckHloRewrite(R"(
-      HloModule Copy
-
-      ENTRY %main (parameter.1: f32[5]) -> f32[5] {
-        %parameter.1 = f32[5]{0} parameter(0)
-        ROOT %copy.3 = f32[5]{0} copy(f32[5]{0} %parameter.1)
-      })",
-                            FusionWrapper(device_description()),
-                            // No change
-                            std::nullopt);
-}
-
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
 TEST_F(FusionWrapperTest, While) {
   RunAndFilecheckHloRewrite(R"(
       HloModule While

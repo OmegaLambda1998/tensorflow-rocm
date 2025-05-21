@@ -505,13 +505,9 @@ GpuPerformanceModelWithIndexingAnalysis::EstimateRunTimeForTriton(
 /*static*/
 LaunchDimensions
 GpuPerformanceModelWithIndexingAnalysis::GetLaunchDimensionsForTiledFusion(
-<<<<<<< HEAD
-    const TiledHloComputation& tiled_hlo_computation) {
-  const auto* tiled_root = tiled_hlo_computation.GetRoot();
-=======
     const TiledHloComputation& tiled_hlo_computation,
     const se::DeviceDescription& device_info) {
->>>>>>> a35cf488d67 ([XLA:GPU] Use DeviceDescription instead of hard-coding warp size as 32)
+  const auto* tiled_root = tiled_hlo_computation.GetRoot();
   int64_t num_blocks = tiled_hlo_computation.num_output_tiles();
   int64_t num_warps = GetNumWarps(GetPaddedTileSize(tiled_root->tile_sizes()));
 
