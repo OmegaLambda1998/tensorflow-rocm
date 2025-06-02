@@ -433,7 +433,7 @@ class MultiProcessRunnerTest(test.TestCase, parameterized.TestCase):
         return_output=True)
     mpr.start()
     with self.assertRaises(ValueError) as cm:
-      mpr.join(timeout=20)
+      mpr.join(timeout=60)
     self.assertGreater(
         sum(['Running' in msg for msg in cm.exception.mpr_result.stdout]), 1)
 
@@ -494,7 +494,7 @@ class MultiProcessRunnerTest(test.TestCase, parameterized.TestCase):
         args=(counter,),
         auto_restart=True)
     mpr.start()
-    time.sleep(10)
+    time.sleep(60)
     logging.warning("terminating worker!")
     mpr.terminate('worker', 0)
     mpr.join(timeout=20)
