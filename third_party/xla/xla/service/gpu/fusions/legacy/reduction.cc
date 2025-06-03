@@ -182,6 +182,10 @@ class ReductionEmitter {
     return reduction_codegen_info_.GetTiling().GetShape()[2];
   }
 
+  int64_t WarpSize() const {
+    return ::xla::gpu::WarpSize(analysis_.device_info());
+  }
+
   llvm::IRBuilder<>* builder_;
   GpuElementalIrEmitter elemental_emitter_;
   const HloFusionAnalysis& analysis_;
@@ -230,7 +234,7 @@ class ReductionGroupEmitter {
       const std::vector<const HloInstruction*>& roots) const;
 
   void EmitReductionOutputForColumnReduction(
-      const TilingKernelInfo& tiling_kernel_info,
+      TilingKernelInfo& tiling_kernel_info,
       const HloReduceInstruction* reduction,
       const std::vector<const HloInstruction*>& roots) const;
 
@@ -311,27 +315,28 @@ ReductionGroupEmitter::ReductionGroupEmitter(
         if (reduction_info.IsRowReduction()) {
           // Multi-row reductions do not use shared memory.
           if (RowReductionGetRowsPerWarp(
-                  reduction_emitter_.ReducedDimensionSize()) > 1) {
+                  reduction_emitter_.ReducedDimensionSize(),
+                  reduction_emitter_.WarpSize()) > 1) {
             return std::nullopt;
           }
           // Allocate one shared memory element per warp.
           auto block_size = tiling.GetThreadsPerBlock();
           CHECK_EQ(block_size[ReductionDimensions::kRowMinorReducedDimension] %
-                       WarpSize(),
+                       reduction_emitter_.WarpSize(),
                    0);
           return llvm_ir::AllocateSharedMemoryTile(
               module, element_type,
               {block_size[ReductionDimensions::kRowKeptDimension],
                block_size[ReductionDimensions::kRowMinorReducedDimension] /
-                   WarpSize()},
+                   reduction_emitter_.WarpSize()},
               "shared_cache");
         }
         const auto& num_threads = tiling.GetThreadsPerBlock();
         int n = num_threads[ReductionDimensions::kColReducedDimension];
-        CHECK_EQ(n, num_threads[ReductionDimensions::kColMinorKeptDimension]);
+        int n_kept = num_threads[ReductionDimensions::kColMinorKeptDimension];
         // The "+1" is used to avoid bank conflicts.
-        return llvm_ir::AllocateSharedMemoryTile(module, element_type,
-                                                 {n, n + 1}, "shared_cache");
+        return llvm_ir::AllocateSharedMemoryTile(
+            module, element_type, {n_kept, n + 1}, "shared_cache");
       }();
 
       llvm_ir::ElementGenerator input_gen =
@@ -527,11 +532,12 @@ void ReductionGroupEmitter::EmitFullWarpShuffleDownLoopForReduce(
   // This only works when the block size is a multiple of 32 threads.
   // We check this here as a mistake in the number of threads per
   // block is very hard to detect.
-  CHECK_EQ(threads_per_block % 32, 0);
-  CHECK_EQ(WarpSize() % num_results_per_warp, 0);
+  CHECK_EQ(threads_per_block % reduction_emitter_.WarpSize(), 0);
+  CHECK_EQ(reduction_emitter_.WarpSize() % num_results_per_warp, 0);
 
   auto* builder = reduction_emitter_.builder_;
-  for (int distance = 16 / num_results_per_warp; distance >= 1; distance /= 2) {
+  for (int distance = reduction_emitter_.WarpSize() / 2 / num_results_per_warp;
+       distance >= 1; distance /= 2) {
     absl::InlinedVector<llvm::Value*, 2> reduction_params;
 
     for (auto acc : partial_result_addresses) {
@@ -682,14 +688,15 @@ void ReductionGroupEmitter::EmitReductionOutputForRowReduction(
 
   const auto& reduction_info = reduction_emitter_.reduction_codegen_info_;
   const Tiling& tiling = reduction_info.GetTiling();
-  int num_rows_per_warp =
-      RowReductionGetRowsPerWarp(reduction_emitter_.ReducedDimensionSize());
+  int num_rows_per_warp = RowReductionGetRowsPerWarp(
+      reduction_emitter_.ReducedDimensionSize(), reduction_emitter_.WarpSize());
   EmitFullWarpShuffleDownLoopForReduce(reducer, absl::MakeSpan(current_outputs),
                                        tiling.GetNumThreadsPerBlock(),
                                        num_rows_per_warp);
 
   KernelSupportLibrary ksl(builder);
-  llvm::Value* warp_id = builder->CreateUDiv(thread_id_x, constant(WarpSize()));
+  llvm::Value* warp_id =
+      builder->CreateUDiv(thread_id_x, constant(reduction_emitter_.WarpSize()));
 
   auto emit_write_output = [&](llvm::Value* write_condition,
                                const absl::Span<TypedPointer const> values) {
@@ -753,7 +760,7 @@ void ReductionGroupEmitter::EmitReductionOutputForRowReduction(
             thread_id_x,
             constant(tiling.GetThreadsPerBlock()
                          [ReductionDimensions::kRowMinorReducedDimension] /
-                     WarpSize()));
+                     reduction_emitter_.WarpSize()));
 
         llvm::Value* selected_value = builder->CreateSelect(
             warp_exists, block_accum_addr, initial_value_addr);
@@ -768,7 +775,8 @@ void ReductionGroupEmitter::EmitReductionOutputForRowReduction(
       // communication using shared memory and synchronization using barrier is
       // also unnecessary and should be removed.
       if (tiling.GetThreadsPerBlock()
-              [ReductionDimensions::kRowMinorReducedDimension] > WarpSize()) {
+              [ReductionDimensions::kRowMinorReducedDimension] >
+          reduction_emitter_.WarpSize()) {
         EmitFullWarpShuffleDownLoopForReduce(
             reducer, absl::MakeSpan(selected_values),
             tiling.GetNumThreadsPerBlock(), /*num_results_per_warp=*/1);
@@ -781,14 +789,13 @@ void ReductionGroupEmitter::EmitReductionOutputForRowReduction(
 
 // Same arguments as EmitReductionOutputForRowReduction.
 void ReductionGroupEmitter::EmitReductionOutputForColumnReduction(
-    const TilingKernelInfo& tiling_kernel_info,
-    const HloReduceInstruction* reduction,
+    TilingKernelInfo& tiling_kernel_info, const HloReduceInstruction* reduction,
     const std::vector<const HloInstruction*>& roots) const {
   auto* builder = reduction_emitter_.builder_;
   KernelSupportLibrary ksl(builder);
   const HloComputation* reducer = reduction->to_apply();
-  const auto& thread_id_info = tiling_kernel_info.thread_id_info;
-  const auto& thread_ids = thread_id_info.thread_ids;
+  auto& thread_id_info = tiling_kernel_info.thread_id_info;
+  auto& thread_ids = thread_id_info.thread_ids;
 
   auto constant = [&](uint64_t c) -> llvm::Constant* {
     return llvm::ConstantInt::get(reduction_emitter_.index_ty_, c);
@@ -800,8 +807,8 @@ void ReductionGroupEmitter::EmitReductionOutputForColumnReduction(
   const Tiling& tiling = reduction_info.GetTiling();
   int num_outputs = reducer->num_parameters() / 2;
 
-  auto* kept_index = thread_ids[ReductionDimensions::kColMinorKeptDimension];
-  auto* reduced_index = thread_ids[ReductionDimensions::kColReducedDimension];
+  auto& kept_index = thread_ids[ReductionDimensions::kColMinorKeptDimension];
+  auto& reduced_index = thread_ids[ReductionDimensions::kColReducedDimension];
 
   // Store the transpose in shared memory.
   for (int output_idx = 0; output_idx < num_outputs; output_idx++) {
@@ -814,6 +821,12 @@ void ReductionGroupEmitter::EmitReductionOutputForColumnReduction(
   }
 
   reduction_emitter_.EmitSyncThreads();
+
+  auto* kept_index_preserved = kept_index;
+  auto* reduced_index_preserved = reduced_index;
+
+  kept_index = thread_id_info.lane_id;
+  reduced_index = thread_id_info.warp_id;
 
   // Get transposed element from shared memory.
   absl::InlinedVector<TypedPointer, 2> shmem_transposed_addrs;
@@ -847,6 +860,9 @@ void ReductionGroupEmitter::EmitReductionOutputForColumnReduction(
            WriteReductionOutput(tiling_kernel_info, reduction, roots,
                                 shmem_transposed_addrs);
          });
+
+  kept_index = kept_index_preserved;
+  reduced_index = reduced_index_preserved;
 }
 
 // Generate a single element of the tile (update the accumulator state) for a
@@ -913,7 +929,7 @@ absl::Status ReductionEmitter::EmitIRForReduction(
 
   for (const HloInstruction* hlo : instr_index_group) {
     auto& hero = FindNonTrivialHero(*hlo);
-    if (IsRealReductionHero(*hlo, hero)) {
+    if (IsRealReductionHero(*hlo, hero, analysis_.device_info())) {
       auto reduction = Cast<HloReduceInstruction>(&hero);
       if (heroes_to_roots.find(reduction) == heroes_to_roots.end()) {
         heroes.push_back(reduction);
@@ -956,7 +972,8 @@ absl::Status ReductionEmitter::EmitIRForReduction(
                 };
             EmitTile(builder_, reduction_codegen_info_.GetTiling(),
                      thread_id_info, tile_dimensions, emit_element);
-          }));
+          },
+          analysis_.device_info()));
 
   KernelSupportLibrary ksl(builder_);
   for (auto reduce : heroes) {
@@ -1012,7 +1029,8 @@ absl::StatusOr<FusionEmissionResult> ReductionEmitter::EmitInitializers() {
   for (int i = 0; i < fusion_roots.size(); ++i) {
     const HloInstruction* fusion_root = &fusion_roots[i].instruction();
 
-    if (IsReductionFromOrToContiguousDimensions(*fusion_root)) {
+    if (IsReductionFromOrToContiguousDimensions(*fusion_root,
+                                                analysis_.device_info())) {
       TF_ASSIGN_OR_RETURN(
           result.thunks.emplace_back(),
           BuildFusedInitializerThunk(fusion_root, slices[i], i));
@@ -1102,7 +1120,8 @@ absl::Status ReductionFusion::EmitKernel(IrEmitterContext& ir_emitter_context,
 int ReductionInfo::GetRowsPerWarp() const {
   if (!is_row_reduction_) return 1;
   return RowReductionGetRowsPerWarp(
-      tiling_.GetShape()[ReductionDimensions::kRowMinorReducedDimension]);
+      tiling_.GetShape()[ReductionDimensions::kRowMinorReducedDimension],
+      WarpSize(analysis_.device_info()));
 }
 
 LaunchDimensions ReductionInfo::launch_dimensions() const {
@@ -1124,29 +1143,31 @@ ReductionInfo ReductionInfo::Create(const HloFusionAnalysis& analysis) {
            << " " << shape[0] << " " << shape[1] << " " << shape[2];
   Vector3 reduction_tiling = GetReductionTiling(reduction_dimensions);
 
-  int64_t num_threads_y =
-      reduction_dimensions.is_row_reduction ? 1 : WarpSize();
+  int64_t num_threads_y = reduction_dimensions.is_row_reduction
+                              ? 1
+                              : WarpSize(analysis.device_info());
   int64_t rows_per_warp =
       reduction_dimensions.is_row_reduction
           ? RowReductionGetRowsPerWarp(
-                shape[ReductionDimensions::kRowMinorReducedDimension])
+                shape[ReductionDimensions::kRowMinorReducedDimension],
+                WarpSize(analysis.device_info()))
           : 1;
   int64_t num_threads_x = [&] {
+    int64_t max_block_size =
+        MinThreadsXRowReduction(hero_reduction->GetModule()->config());
     if (reduction_dimensions.is_row_reduction) {
       if (rows_per_warp > 1) {
         return shape[ReductionDimensions::kRowMinorReducedDimension];
       }
-      int64_t max_block_size =
-          MinThreadsXRowReduction(hero_reduction->GetModule()->config());
       return std::min(
           max_block_size,
           RoundUpTo(
               CeilOfRatio(shape[ReductionDimensions::kRowMinorReducedDimension],
                           reduction_tiling
                               [ReductionDimensions::kRowMinorReducedDimension]),
-              WarpSize()));
+              WarpSize(analysis.device_info())));
     }
-    return WarpSize();
+    return max_block_size / WarpSize(analysis.device_info());
   }();
 
   // If we're limited by the size of the x dimension, add additional parallelism
@@ -1166,7 +1187,8 @@ ReductionInfo ReductionInfo::Create(const HloFusionAnalysis& analysis) {
       // num_threads_x is a power of two, but it may be less than 32. If dim_y
       // is also small, we may have to increase the bound so the total number of
       // threads is a multiple of 32.
-      while ((num_threads_x * num_threads_y) % 32) ++num_threads_y;
+      while ((num_threads_x * num_threads_y) % WarpSize(analysis.device_info()))
+        ++num_threads_y;
     } else {
       num_threads_y = kThreadsPerBlockTarget / num_threads_x;
     }
@@ -1197,8 +1219,9 @@ ReductionInfo ReductionInfo::Create(const HloFusionAnalysis& analysis) {
 
   Tiling tiling(tiled_shape, tile_per_thread, num_threads,
                 /*loops_to_unroll=*/{false, false, true, false});
-  bool reduction_is_race_free = ReductionIsRaceFree(
-      hero_reduction->GetModule()->config(), reduction_dimensions);
+  bool reduction_is_race_free =
+      ReductionIsRaceFree(hero_reduction->GetModule()->config(),
+                          reduction_dimensions, analysis.device_info());
   return ReductionInfo(analysis, tiling, reduction_dimensions.is_row_reduction,
                        reduction_is_race_free,
                        GroupDisjointReductions(analysis, /*for_mlir=*/false),
@@ -1250,7 +1273,8 @@ std::optional<IndexingMap> ReductionInfo::ComputeThreadIdToOutputIndexing(
       int rows_per_warp = GetRowsPerWarp();
       if (rows_per_warp > 1) {
         linear_index.AddConstraint(
-            thread_ids[kRowMinorReduced] % (WarpSize() / rows_per_warp),
+            thread_ids[kRowMinorReduced] %
+                (WarpSize(analysis_.device_info()) / rows_per_warp),
             {0, 0});
       } else {
         linear_index.AddConstraint(thread_ids[kRowMinorReduced], {0, 0});
@@ -1277,7 +1301,7 @@ std::optional<IndexingMap> ReductionInfo::ComputeThreadIdToOutputIndexing(
     projected_index.AddConstraint(
         mlir::getAffineDimExpr(
             KernelFusionInterface::kIndexingMapThreadIdxDims[0], ctx) %
-            WarpSize(),
+            WarpSize(analysis_.device_info()),
         {0, 0});
     if (!is_row_reduction_) {
       projected_index.AddConstraint(
