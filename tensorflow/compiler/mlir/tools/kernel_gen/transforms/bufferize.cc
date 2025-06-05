@@ -54,7 +54,7 @@ struct BufferizeJITExecuteOp
 
 void populateExtraBufferizePatterns(
     ConversionTarget &target, MLIRContext *context,
-    bufferization::BufferizeTypeConverter *converter,
+    mlir::TypeConverter *converter,
     RewritePatternSet *patterns) {
   target.addLegalDialect<tf_framework::TFFrameworkDialect>();
   auto typesAreLegal = [converter](Operation *op) {

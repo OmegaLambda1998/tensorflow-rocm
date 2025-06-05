@@ -49,7 +49,7 @@ namespace transforms {
 void populateExtraBufferizeDialects(DialectRegistry &registry);
 void populateExtraBufferizePatterns(
     ConversionTarget &target, MLIRContext *context,
-    bufferization::BufferizeTypeConverter *converter,
+    mlir::TypeConverter *converter,
     RewritePatternSet *patterns);
 
 }  // namespace transforms

@@ -28,7 +28,7 @@ class RewritePatternSet;
 /// Collects a set of patterns that bufferize operations from the standard and
 /// other dialects.
 void populateExtraBufferizePatterns(
-    MLIRContext *context, bufferization::BufferizeTypeConverter *converter,
+    MLIRContext *context, mlir::TypeConverter *converter,
     RewritePatternSet *patterns);
 
 }  // namespace mlir

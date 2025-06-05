@@ -180,7 +180,7 @@ CreateInsertCalibrationStatisticsSaverPass(
     StringRef calibration_data_dir,
     const std::vector<std::string>& aggregator_ops_to_ignore) {
   InsertCalibrationStatisticsSaverPassOptions options = {
-      .aggregator_ops_to_ignore_ = aggregator_ops_to_ignore,
+      .aggregator_ops_to_ignore_ = llvm::to_vector(aggregator_ops_to_ignore),
       .calibration_data_dir_ = calibration_data_dir.str(),
   };
   return std::make_unique<InsertCalibrationStatisticsSaverPass>(options);
