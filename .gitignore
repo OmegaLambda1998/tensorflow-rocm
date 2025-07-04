@@ -1,7 +1,6 @@
 .DS_Store
 .ipynb_checkpoints
 node_modules
-/.bazelrc.user
 /.tf_configure.bazelrc
 /xla_configure.bazelrc
 /bazel-*
