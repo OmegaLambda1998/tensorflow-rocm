@@ -50,3 +50,7 @@ gradleBuild
 Podfile.lock
 Pods
 xcuserdata
+
+# UV
+uv.lock
+.python-version
